@@ -13,7 +13,12 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 def _parse_cors_origins_extra(value: str) -> list[str]:
     if not value.strip():
         return []
-    return [origin.strip() for origin in value.split(",") if origin.strip()]
+    origins: list[str] = []
+    for origin in value.split(","):
+        cleaned = origin.strip().rstrip("/")
+        if cleaned:
+            origins.append(cleaned)
+    return origins
 
 
 class Settings(BaseSettings):
@@ -26,6 +31,8 @@ class Settings(BaseSettings):
     # Comma-separated production frontend URLs, e.g.
     # https://nba-initials.netlify.app
     cors_origins_extra: str = ""
+    # Regex for deployed Netlify frontends, e.g. https://nbanamerush.netlify.app
+    cors_origin_regex: str = r"https://.*\.netlify\.app"
     current_season: str = "2025-26"
     # "all_time" = every NBA player ever; "current" = active rosters only
     player_pool_mode: str = "all_time"
