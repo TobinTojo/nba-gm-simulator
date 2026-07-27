@@ -1,0 +1,8 @@
+# Python 3.14: use pydantic>=2.12 (has pre-built wheels).
+# Python 3.12/3.13: any version below works too.
+fastapi>=0.115.6
+uvicorn[standard]>=0.34.0
+sqlalchemy>=2.0.36
+pydantic>=2.12
+pydantic-settings>=2.6.1
+python-multipart>=0.0.20
