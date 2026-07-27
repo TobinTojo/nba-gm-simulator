@@ -9,3 +9,5 @@ CREATE TABLE IF NOT EXISTS public.leaderboard (
 
 CREATE INDEX IF NOT EXISTS leaderboard_high_score_idx
   ON public.leaderboard (high_score DESC, updated_at ASC);
+
+ALTER TABLE public.leaderboard DISABLE ROW LEVEL SECURITY;

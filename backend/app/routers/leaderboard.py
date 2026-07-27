@@ -1,5 +1,7 @@
 """Online leaderboard routes."""
 
+import logging
+
 from fastapi import APIRouter, Header, HTTPException, Query
 
 from app.schemas import LeaderboardResponse, LeaderboardEntry, SubmitScoreRequest, SubmitScoreResponse
@@ -10,6 +12,8 @@ from app.services.leaderboard_service import (
     leaderboard_enabled,
     submit_high_score,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -61,6 +65,7 @@ def leaderboard_submit(
     except LeaderboardUnavailable as exc:
         raise _leaderboard_unavailable() from exc
     except Exception as exc:
+        logger.exception("Leaderboard submit failed for user %s", claims.get("sub"))
         raise HTTPException(status_code=500, detail="Could not save score.") from exc
 
     return SubmitScoreResponse(

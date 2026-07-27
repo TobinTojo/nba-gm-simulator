@@ -64,7 +64,7 @@ def verify_supabase_access_token(token: str) -> dict:
     if _jwks_client() is not None:
         try:
             payload = _decode_with_jwks(token)
-        except jwt.PyJWTError as exc:
+        except Exception as exc:
             errors.append(f"asymmetric: {exc}")
         else:
             user_id = payload.get("sub")

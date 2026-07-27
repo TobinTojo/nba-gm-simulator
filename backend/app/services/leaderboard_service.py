@@ -31,7 +31,7 @@ def submit_high_score(user_id: str, display_name: str, score: int) -> dict[str, 
     with _connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
-                "SELECT high_score FROM leaderboard WHERE user_id = %s",
+                "SELECT high_score FROM public.leaderboard WHERE user_id = %s",
                 (user_uuid,),
             )
             existing = cur.fetchone()
@@ -39,26 +39,28 @@ def submit_high_score(user_id: str, display_name: str, score: int) -> dict[str, 
 
             cur.execute(
                 """
-                INSERT INTO leaderboard (user_id, display_name, high_score, updated_at)
+                INSERT INTO public.leaderboard (user_id, display_name, high_score, updated_at)
                 VALUES (%s, %s, %s, NOW())
                 ON CONFLICT (user_id) DO UPDATE SET
                     display_name = EXCLUDED.display_name,
-                    high_score = GREATEST(leaderboard.high_score, EXCLUDED.high_score),
+                    high_score = GREATEST(public.leaderboard.high_score, EXCLUDED.high_score),
                     updated_at = CASE
-                        WHEN EXCLUDED.high_score > leaderboard.high_score THEN NOW()
-                        ELSE leaderboard.updated_at
+                        WHEN EXCLUDED.high_score > public.leaderboard.high_score THEN NOW()
+                        ELSE public.leaderboard.updated_at
                     END
                 RETURNING high_score
                 """,
                 (user_uuid, display_name[:80], score),
             )
             row = cur.fetchone()
+            if row is None:
+                raise RuntimeError("Insert did not return a row.")
 
             cur.execute(
                 """
                 SELECT rank FROM (
                     SELECT user_id, RANK() OVER (ORDER BY high_score DESC, updated_at ASC) AS rank
-                    FROM leaderboard
+                    FROM public.leaderboard
                 ) ranked
                 WHERE user_id = %s
                 """,
@@ -87,7 +89,7 @@ def get_leaderboard(limit: int = 25, user_id: str | None = None) -> list[dict[st
                     high_score,
                     updated_at,
                     RANK() OVER (ORDER BY high_score DESC, updated_at ASC) AS rank
-                FROM leaderboard
+                FROM public.leaderboard
                 ORDER BY high_score DESC, updated_at ASC
                 LIMIT %s
                 """,
