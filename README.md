@@ -1,84 +1,162 @@
-# NBA GM Simulator
+# NBA Initials — Name Rush
 
-A local full-stack NBA General Manager simulator.
+A fast-paced NBA trivia game. You get **30 seconds** to guess an all-time NBA player from their **initials**. Faster answers earn more points.
 
-**Phase 4** adds per-career league state, AI trade inbox, contract extensions, season awards, play-in tournament, and owner job security.
+**Live site:** [nbanamerush.netlify.app](https://nbanamerush.netlify.app)
 
-## How to Run
+---
 
-```bash
-# Backend
-cd backend && .venv\Scripts\activate && uvicorn app.main:app --reload --port 8000
+## How to Play
 
-# Frontend
-cd frontend && npm install && npm run dev
+1. You see two initials (e.g. **MJ**)
+2. Type a player name who matches those initials
+3. Answer quickly — points equal seconds remaining (up to **30 pts**)
+4. Correct answer → new initials, timer resets
+5. Wrong answer, invalid player, or time runs out → game over
+
+### Rules
+
+- **5,100+ all-time NBA players** in the pool
+- Shows how many players share each set of initials
+- Close spellings still count (e.g. "Lebron James" → LeBron James)
+- Suffixes like Jr., III are handled correctly (Otto Porter Jr. = **OP**)
+- On game over, see every valid player for each round with their career span
+
+---
+
+## Tech Stack
+
+| Layer | Tech |
+|---|---|
+| Frontend | React, TypeScript, Vite, Tailwind CSS |
+| Backend | Python, FastAPI |
+| Player data | Bundled JSON (~5,100 players with career seasons) |
+| Hosting | Netlify (frontend) + Render (API) |
+
+---
+
+## Local Development
+
+### Prerequisites
+
+- Python 3.12+ (3.14 works with the pinned pydantic version)
+- Node.js 20+
+
+### Backend
+
+```powershell
+cd backend
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8001
 ```
 
-## Phase 4 Features
+API docs: [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs)
 
-### Per-Career League State
-- Win/loss records stored in `CareerTeamState` — each save slot has its own standings
-- News feed filtered by `career_id`
-- Loading a career restores that save's league records
+### Frontend
 
-### AI Trade Inbox (`/trades`)
-- Incoming trade offers from AI teams
-- Trade rumors in news feed
-- Accept or decline offers from inbox
+```powershell
+cd frontend
+npm install
+npm run dev
+```
 
-### Contract Extensions (`/cap-sheet`)
-- View expiring contracts
-- Negotiate extensions with player acceptance logic
-- Player/team options processed in offseason
+Open [http://localhost:5173](http://localhost:5173). The Vite dev server proxies `/api` to the backend on port 8001.
 
-### Season Awards (`/awards`)
-- MVP, Defensive Player of the Year, All-NBA teams
-- Computed at championship / offseason
-- Stored per career
+---
 
-### Play-In Tournament (`/playoffs`)
-- Seeds 7–10 compete before Round 1
-- Best-of-1 play-in games determine final 7/8 seeds
+## Project Structure
 
-### Job Security (Team Hub)
-- Meter tracks owner satisfaction (0–100%)
-- Updates on wins/losses, playoff results, expectations
-- Status labels: Secure, Stable, On Notice, Hot Seat, Critical
+```
+nba-gm-simulator/
+├── backend/
+│   ├── app/
+│   │   ├── main.py              # FastAPI entry point
+│   │   ├── config.py            # Settings + CORS
+│   │   ├── routers/game.py      # Game API routes
+│   │   └── services/
+│   │       └── name_game_service.py  # Game logic, fuzzy match, scoring
+│   ├── data/
+│   │   └── all_time_players.json     # Player pool (required for deploy)
+│   └── requirements.txt
+├── frontend/
+│   ├── src/
+│   │   ├── pages/GamePage.tsx   # Main game UI
+│   │   └── api/client.ts        # API client
+│   └── public/_redirects        # Netlify API proxy fallback
+└── netlify.toml                 # Netlify build + deploy config
+```
 
-## New API Endpoints
+> **Note:** The repo folder is still named `nba-gm-simulator` from an earlier project. The active app is the initials game only.
+
+---
+
+## Deployment
+
+The app is split across two free hosts:
+
+| Service | Host | Purpose |
+|---|---|---|
+| Frontend | [Netlify](https://netlify.com) | Static React build |
+| Backend | [Render](https://render.com) | FastAPI web service |
+
+### Render (backend)
+
+| Setting | Value |
+|---|---|
+| Root Directory | `backend` |
+| Build Command | `pip install -r requirements.txt` |
+| Start Command | `uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+
+**Environment variable:**
+
+| Key | Value |
+|---|---|
+| `CORS_ORIGINS_EXTRA` | `https://your-site.netlify.app` (no trailing slash) |
+
+### Netlify (frontend)
+
+Netlify reads `netlify.toml` automatically:
+
+| Setting | Value |
+|---|---|
+| Base directory | `frontend` |
+| Build command | `npm run build` |
+| Publish directory | `dist` |
+
+`VITE_API_URL` is set in `netlify.toml` to point at the Render API.
+
+After changing env vars on either host, trigger a **fresh deploy** (clear cache on Netlify).
+
+---
+
+## API Endpoints
 
 | Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/career/status` | Job security + owner expectations |
-| GET | `/api/trades/inbox` | Pending AI trade offers |
-| POST | `/api/trades/inbox/{id}/respond` | Accept/decline offer |
-| GET | `/api/contracts/expiring` | Expiring contracts |
-| POST | `/api/contracts/extend` | Extend a player contract |
-| GET | `/api/awards` | Season awards for active career |
+|---|---|---|
+| GET | `/api/health` | Health check + player count |
+| GET | `/api/game/status` | Game config (timer, player count) |
+| POST | `/api/game/start` | Start a round, get first initials |
+| POST | `/api/game/guess` | Submit a guess |
+| POST | `/api/game/reveal` | Get all players matching initials (game over) |
 
-## Architecture Decisions
+---
 
-1. **CareerTeamState table** — Isolates W-L per save without duplicating entire rosters
-2. **TradeOffer model** — Persistent inbox with JSON asset lists
-3. **career_id on Transaction/Award/SeasonResult** — Scoped news and history
-4. **Play-in before bracket** — Resolves seeds 7/8 before traditional Round 1
-5. **Job security on CareerSave** — GM meta-progression tied to owner expectations
+## Regenerating Player Data
 
-## Full Season Loop
+The all-time player list is bundled in `backend/data/all_time_players.json`. To refresh it from the NBA API:
 
-```
-Regular Season → Trade Deadline → Play-In → Playoffs → Awards
-→ Offseason (options, extensions, FA) → Draft → Next Season
+```powershell
+cd backend
+.venv\Scripts\activate
+pip install nba_api
+python scripts/generate_all_time_players.py
 ```
 
-## What to Build Next (Phase 5)
+This requires network access and pulls ~5,100 players with career season spans.
 
-- Full roster snapshot isolation per career
-- AI-initiated extension demands
-- Play-in best-of-3 format
-- All-Defensive / All-Rookie teams
-- GM firing / new job offers
-- Historical stats hall of fame
+---
 
 ## License
 
