@@ -553,3 +553,26 @@ class InitialsRevealEntry(BaseModel):
 class InitialsRevealResponse(BaseModel):
     reveals: list[InitialsRevealEntry]
 
+
+class LeaderboardEntry(BaseModel):
+    rank: int
+    display_name: str
+    high_score: int
+    updated_at: str | None = None
+    is_you: bool = False
+
+
+class LeaderboardResponse(BaseModel):
+    enabled: bool = True
+    entries: list[LeaderboardEntry] = Field(default_factory=list)
+
+
+class SubmitScoreRequest(BaseModel):
+    score: int = Field(ge=0, le=100000)
+
+
+class SubmitScoreResponse(BaseModel):
+    high_score: int
+    is_new_best: bool
+    rank: int | None = None
+

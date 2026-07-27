@@ -6,7 +6,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers.game import router
+from app.routers.game import router as game_router
+from app.routers.leaderboard import router as leaderboard_router
 
 logging.basicConfig(level=logging.INFO)
 
@@ -25,7 +26,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(router, prefix="/api")
+app.include_router(game_router, prefix="/api")
+app.include_router(leaderboard_router, prefix="/api")
 
 
 @app.get("/")

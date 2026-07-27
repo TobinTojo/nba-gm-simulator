@@ -1,10 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/api/client';
+import { useLeaderboardAuth } from '@/hooks/useLeaderboardAuth';
+import { LeaderboardPanel } from '@/LeaderboardPanel';
 import type { GamePhase, InitialsRevealEntry, SessionRound } from '@/types';
 
 const DEFAULT_TIMER_SECONDS = 30;
 
 export function GamePage() {
+  const {
+    enabled: leaderboardEnabled,
+    user,
+    session,
+    authLoading,
+    signInWithGitHub,
+    signOut,
+    submitScore,
+    submitNotice,
+  } = useLeaderboardAuth();
+
   const [phase, setPhase] = useState<GamePhase>('idle');
   const [initials, setInitials] = useState('');
   const [initialsPlayerCount, setInitialsPlayerCount] = useState(0);
@@ -22,6 +35,9 @@ export function GamePage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [timerGeneration, setTimerGeneration] = useState(0);
+  const [leaderboardMessage, setLeaderboardMessage] = useState('');
+  const [leaderboardRefreshKey, setLeaderboardRefreshKey] = useState(0);
+  const [submittingScore, setSubmittingScore] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const phaseRef = useRef<GamePhase>('idle');
@@ -30,6 +46,7 @@ export function GamePage() {
   const initialsRef = useRef(initials);
   const guessRef = useRef(guess);
   const sessionRoundsRef = useRef(sessionRounds);
+  const submittedScoreRef = useRef<number | null>(null);
 
   useEffect(() => {
     phaseRef.current = phase;
@@ -54,6 +71,12 @@ export function GamePage() {
   useEffect(() => {
     sessionRoundsRef.current = sessionRounds;
   }, [sessionRounds]);
+
+  useEffect(() => {
+    if (submitNotice) {
+      setLeaderboardRefreshKey((value) => value + 1);
+    }
+  }, [submitNotice]);
 
   useEffect(() => {
     void api
@@ -87,10 +110,40 @@ export function GamePage() {
       setSessionRounds(allRounds);
       setPhase('gameover');
       setMessage(reason);
+      setLeaderboardMessage('');
+      submittedScoreRef.current = null;
       await loadReveals(allRounds);
     },
     [loadReveals],
   );
+
+  useEffect(() => {
+    if (phase !== 'gameover' || !leaderboardEnabled || !session?.access_token || score <= 0) {
+      return;
+    }
+    if (submittedScoreRef.current === score) {
+      return;
+    }
+
+    submittedScoreRef.current = score;
+    setSubmittingScore(true);
+    void submitScore(score, session.access_token)
+      .then((result) => {
+        if (result.is_new_best) {
+          setLeaderboardMessage(
+            result.rank ? `New personal best! Rank #${result.rank}` : 'New personal best saved!',
+          );
+        } else {
+          setLeaderboardMessage(`Your best score remains ${result.high_score} pts`);
+        }
+        setLeaderboardRefreshKey((value) => value + 1);
+      })
+      .catch(() => {
+        setLeaderboardMessage('Could not save score to the leaderboard.');
+        submittedScoreRef.current = null;
+      })
+      .finally(() => setSubmittingScore(false));
+  }, [phase, score, session, submitScore, leaderboardEnabled]);
 
   const endGameOnTimeout = useCallback(() => {
     const spent = timerSecondsRef.current;
@@ -151,6 +204,8 @@ export function GamePage() {
       setSessionRounds([]);
       setReveals([]);
       setMessage('');
+      setLeaderboardMessage('');
+      submittedScoreRef.current = null;
       setTimerGeneration((n) => n + 1);
       setPhase('playing');
     } catch (err) {
@@ -259,6 +314,17 @@ export function GamePage() {
             <button type="button" onClick={() => void handleStart()} className="btn-primary mt-8 px-10 py-3 text-lg">
               Start Game
             </button>
+
+            {leaderboardEnabled && (
+              <div className="mt-10 w-full max-w-md">
+                {submitNotice && (
+                  <p className="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+                    {submitNotice}
+                  </p>
+                )}
+                <LeaderboardPanel accessToken={session?.access_token} refreshKey={leaderboardRefreshKey} />
+              </div>
+            )}
           </div>
         ) : (
           <>
@@ -336,6 +402,56 @@ export function GamePage() {
                   <p className="mt-2 text-2xl font-bold text-white">{message}</p>
                   <p className="mt-4 text-4xl font-bold text-accent">{score} pts</p>
                   <p className="mt-1 text-slate-400">{streak} correct in a row</p>
+
+                  {leaderboardEnabled && (
+                    <div className="mt-6 w-full max-w-md text-left">
+                      {authLoading || submittingScore ? (
+                        <p className="text-sm text-slate-400">Saving score...</p>
+                      ) : user ? (
+                        <div className="space-y-2">
+                          <p className="text-sm text-slate-300">
+                            Signed in as{' '}
+                            <span className="text-white">
+                              {user.user_metadata?.user_name ??
+                                user.user_metadata?.full_name ??
+                                user.email ??
+                                'Player'}
+                            </span>
+                          </p>
+                          {leaderboardMessage && (
+                            <p className="text-sm text-emerald-400">{leaderboardMessage}</p>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => void signOut()}
+                            className="text-xs text-slate-500 underline hover:text-slate-300"
+                          >
+                            Sign out
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <p className="text-sm text-slate-400">
+                            Sign in with GitHub to save this score to the leaderboard.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => void signInWithGitHub(score)}
+                            className="btn-primary w-full py-3"
+                          >
+                            Sign in with GitHub
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="mt-6">
+                        <LeaderboardPanel
+                          accessToken={session?.access_token}
+                          refreshKey={leaderboardRefreshKey}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {sessionRounds.length > 0 && (

@@ -66,3 +66,22 @@ export interface RoundLog {
   points: number;
   matched_name: string;
 }
+
+export interface LeaderboardEntry {
+  rank: number;
+  display_name: string;
+  high_score: number;
+  updated_at: string | null;
+  is_you: boolean;
+}
+
+export interface LeaderboardResponse {
+  enabled: boolean;
+  entries: LeaderboardEntry[];
+}
+
+export interface SubmitScoreResponse {
+  high_score: number;
+  is_new_best: boolean;
+  rank: number | null;
+}

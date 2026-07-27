@@ -4,6 +4,8 @@ import type {
   GameStatusResponse,
   HealthResponse,
   InitialsRevealResponse,
+  LeaderboardResponse,
+  SubmitScoreResponse,
 } from '@/types';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? '/api';
@@ -48,5 +50,15 @@ export const api = {
         initials_list: initialsList,
         mode: 'all_time',
       }),
+    }),
+  getLeaderboard: (limit = 25, accessToken?: string) =>
+    request<LeaderboardResponse>(`/leaderboard?limit=${limit}`, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+    }),
+  submitLeaderboardScore: (score: number, accessToken: string) =>
+    request<SubmitScoreResponse>('/leaderboard/submit', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ score }),
     }),
 };

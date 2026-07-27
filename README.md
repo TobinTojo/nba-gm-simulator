@@ -109,11 +109,13 @@ The app is split across two free hosts:
 | Build Command | `pip install -r requirements.txt` |
 | Start Command | `uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
 
-**Environment variable:**
+**Environment variables:**
 
 | Key | Value |
 |---|---|
 | `CORS_ORIGINS_EXTRA` | `https://your-site.netlify.app` (no trailing slash) |
+| `LEADERBOARD_DATABASE_URL` | Supabase Postgres connection string (optional; enables leaderboard) |
+| `SUPABASE_JWT_SECRET` | Supabase JWT secret from Project Settings → API (required with leaderboard) |
 
 ### Netlify (frontend)
 
@@ -127,7 +129,30 @@ Netlify reads `netlify.toml` automatically:
 
 `VITE_API_URL` is set in `netlify.toml` to point at the Render API.
 
+**Additional environment variables for the online leaderboard** (set in Netlify → Site configuration → Environment variables):
+
+| Key | Value |
+|---|---|
+| `VITE_SUPABASE_URL` | Your Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` | Supabase anon/public key |
+
+If these are omitted, the game works normally but the leaderboard UI is hidden.
+
 After changing env vars on either host, trigger a **fresh deploy** (clear cache on Netlify).
+
+### Online leaderboard setup (Supabase)
+
+1. Create a free [Supabase](https://supabase.com) project.
+2. In **Authentication → Providers**, enable **GitHub** and add your OAuth app callback URL (`https://<project-ref>.supabase.co/auth/v1/callback`).
+3. In **SQL Editor**, run the migration in `backend/sql/leaderboard.sql` (creates one row per user, keeps highest score only).
+4. Copy from **Project Settings → API**:
+   - Project URL → `VITE_SUPABASE_URL` (Netlify)
+   - anon public key → `VITE_SUPABASE_ANON_KEY` (Netlify)
+   - JWT Secret → `SUPABASE_JWT_SECRET` (Render)
+5. Copy from **Project Settings → Database** the Postgres connection string (URI mode) → `LEADERBOARD_DATABASE_URL` (Render).
+6. Redeploy Netlify and Render.
+
+**How it works:** After game over, players sign in with GitHub. The score is submitted automatically. Each user appears once on the leaderboard with their personal best.
 
 ---
 
@@ -140,6 +165,8 @@ After changing env vars on either host, trigger a **fresh deploy** (clear cache 
 | POST | `/api/game/start` | Start a round, get first initials |
 | POST | `/api/game/guess` | Submit a guess |
 | POST | `/api/game/reveal` | Get all players matching initials (game over) |
+| GET | `/api/leaderboard?limit=25` | Top scores (optional `Authorization: Bearer` to highlight your row) |
+| POST | `/api/leaderboard/submit` | Submit score (requires Supabase JWT; upserts one row per user) |
 
 ---
 
