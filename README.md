@@ -115,7 +115,8 @@ The app is split across two free hosts:
 |---|---|
 | `CORS_ORIGINS_EXTRA` | `https://your-site.netlify.app` (no trailing slash) |
 | `LEADERBOARD_DATABASE_URL` | Supabase Postgres connection string (optional; enables leaderboard) |
-| `SUPABASE_JWT_SECRET` | Supabase JWT secret from Project Settings → API (required with leaderboard) |
+| `SUPABASE_URL` | Supabase project URL, e.g. `https://xyz.supabase.co` (required for sign-in) |
+| `SUPABASE_JWT_SECRET` | Legacy JWT secret (optional; newer projects use asymmetric keys via `SUPABASE_URL`) |
 
 ### Netlify (frontend)
 
@@ -148,8 +149,9 @@ After changing env vars on either host, trigger a **fresh deploy** (clear cache 
 4. Copy from **Project Settings → API**:
    - Project URL → `VITE_SUPABASE_URL` (Netlify)
    - anon public key → `VITE_SUPABASE_ANON_KEY` (Netlify)
-   - JWT Secret → `SUPABASE_JWT_SECRET` (Render)
-5. Copy from **Project Settings → Database** the Postgres connection string (URI mode) → `LEADERBOARD_DATABASE_URL` (Render).
+   - Project URL → `SUPABASE_URL` (Render)
+   - JWT Secret → `SUPABASE_JWT_SECRET` (Render, optional on newer projects)
+5. Copy from **Connect → Direct → Session pooler → URI** the Postgres connection string → `LEADERBOARD_DATABASE_URL` (Render).
 6. Redeploy Netlify and Render.
 
 **How it works:** After game over, players sign in with GitHub. The score is submitted automatically. Each user appears once on the leaderboard with their personal best.
