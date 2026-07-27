@@ -21,5 +21,24 @@
     }
   },
   "include": ["src"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "exclude": [
+    "src/components",
+    "src/context",
+    "src/utils",
+    "src/pages/AnalyticsPage.tsx",
+    "src/pages/AwardsPage.tsx",
+    "src/pages/CapSheetPage.tsx",
+    "src/pages/DraftPage.tsx",
+    "src/pages/FreeAgencyPage.tsx",
+    "src/pages/HomePage.tsx",
+    "src/pages/LoadSavePage.tsx",
+    "src/pages/NewCareerPage.tsx",
+    "src/pages/PlayerPage.tsx",
+    "src/pages/PlayoffsPage.tsx",
+    "src/pages/SchedulePage.tsx",
+    "src/pages/SettingsPage.tsx",
+    "src/pages/StandingsPage.tsx",
+    "src/pages/TeamHubPage.tsx",
+    "src/pages/TradesPage.tsx"
+  ]
 }

@@ -2,11 +2,18 @@
 
 from pathlib import Path
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _parse_cors_origins_extra(value: str) -> list[str]:
+    if not value.strip():
+        return []
+    return [origin.strip() for origin in value.split(",") if origin.strip()]
 
 
 class Settings(BaseSettings):
@@ -16,8 +23,8 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ]
-    # Optional: comma-separated list for production, e.g.
-    # https://nba-initials.onrender.com,https://my-app.netlify.app
+    # Comma-separated production frontend URLs, e.g.
+    # https://nba-initials.netlify.app
     cors_origins_extra: str = ""
     current_season: str = "2025-26"
     # "all_time" = every NBA player ever; "current" = active rosters only
@@ -30,12 +37,14 @@ class Settings(BaseSettings):
     max_roster_size: int = 15
     playoff_series_length: int = 7
 
+    @model_validator(mode="after")
+    def merge_cors_origins(self) -> "Settings":
+        existing = set(self.cors_origins)
+        for origin in _parse_cors_origins_extra(self.cors_origins_extra):
+            if origin not in existing:
+                self.cors_origins.append(origin)
+                existing.add(origin)
+        return self
+
 
 settings = Settings()
-
-if settings.cors_origins_extra.strip():
-    settings.cors_origins.extend(
-        origin.strip()
-        for origin in settings.cors_origins_extra.split(",")
-        if origin.strip()
-    )
