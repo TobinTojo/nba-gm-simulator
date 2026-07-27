@@ -5,3 +5,16 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  VITE_API_URL = "https://nba-gm-simulator.onrender.com/api"
+
+# Proxy /api to Render if the built app uses relative /api paths
+[[redirects]]
+  from = "/api/*"
+  to = "https://nba-gm-simulator.onrender.com/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
