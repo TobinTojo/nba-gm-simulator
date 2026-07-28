@@ -2,14 +2,14 @@ interface AnimatedBasketballProps {
   className?: string;
 }
 
-/** Simple basketball icon with a bounce animation. */
+/** Simple basketball icon that slowly bounces and spins. */
 export function AnimatedBasketball({ className = '' }: AnimatedBasketballProps) {
   return (
-    <div className={`relative flex items-center justify-center ${className}`} aria-hidden="true">
+    <div className={`relative mx-auto flex items-center justify-center ${className}`} aria-hidden="true">
       <img
         src="/basketball.svg"
         alt=""
-        className="ball-bounce h-44 w-44 sm:h-56 sm:w-56 lg:h-64 lg:w-64"
+        className="ball-bounce h-40 w-40 sm:h-52 sm:w-52 lg:h-60 lg:w-60"
         draggable={false}
       />
     </div>

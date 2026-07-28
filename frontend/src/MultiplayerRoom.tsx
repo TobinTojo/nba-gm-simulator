@@ -34,6 +34,7 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
   const [copied, setCopied] = useState(false);
   const [displayTime, setDisplayTime] = useState(30);
   const [displayCountdown, setDisplayCountdown] = useState(3);
+  const [correctFlash, setCorrectFlash] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const accessToken = session?.access_token;
@@ -46,7 +47,7 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
     'Player';
 
   useEffect(() => {
-    if (!room || room.status === 'finished' || !accessToken) return;
+    if (!room || room.status === 'finished' || !accessToken || correctFlash) return;
 
     const intervalMs = room.status === 'countdown' ? 250 : 800;
     const interval = window.setInterval(() => {
@@ -59,7 +60,7 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
     }, intervalMs);
 
     return () => window.clearInterval(interval);
-  }, [room?.code, room?.status, accessToken]);
+  }, [room?.code, room?.status, accessToken, correctFlash]);
 
   const finishedNotifiedRef = useRef(false);
 
@@ -194,16 +195,24 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
 
   async function handleGuess(event: React.FormEvent) {
     event.preventDefault();
-    if (!room || !accessToken || room.status !== 'playing' || busy || !guess.trim()) return;
+    if (!room || !accessToken || room.status !== 'playing' || busy || !guess.trim() || correctFlash) {
+      return;
+    }
 
     setBusy(true);
     setError(null);
     try {
       const next = await api.submitMultiplayerGuess(room.code, guess.trim(), accessToken);
-      setRoom(next);
       setFeedback(next.your_feedback || '');
       if (next.accepted) {
         setGuess('');
+        setCorrectFlash(next.last_matched_name || 'Correct!');
+        setBusy(false);
+        await new Promise((resolve) => window.setTimeout(resolve, 1100));
+        setRoom(next);
+        setCorrectFlash(null);
+      } else {
+        setRoom(next);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not submit guess.');
@@ -227,7 +236,7 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
     return (
       <div className="flex flex-1 flex-col items-center justify-center text-center">
         <p className="text-lg text-slate-300">Multiplayer needs Google sign-in configured.</p>
-        <button type="button" onClick={onExit} className="mt-8 text-sm text-slate-500 underline">
+        <button type="button" onClick={onExit} className="btn-leave mt-8">
           Back to home
         </button>
       </div>
@@ -253,7 +262,7 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
         >
           Sign in with Google
         </button>
-        <button type="button" onClick={onExit} className="mt-8 text-sm text-slate-500 underline hover:text-slate-300">
+        <button type="button" onClick={onExit} className="btn-leave mt-8">
           Back to home
         </button>
       </div>
@@ -343,7 +352,7 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
 
         {error && <p className="mt-4 text-sm text-red-300">{error}</p>}
 
-        <button type="button" onClick={onExit} className="mt-8 text-sm text-slate-500 underline hover:text-slate-300">
+        <button type="button" onClick={onExit} className="btn-leave mt-8">
           Back to home
         </button>
       </div>
@@ -374,7 +383,7 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
             {room.era_label} · {room.total_rounds} rounds
           </p>
         </div>
-        <button type="button" onClick={onExit} className="text-sm text-slate-500 underline hover:text-slate-300">
+        <button type="button" onClick={onExit} className="btn-leave">
           Leave
         </button>
       </div>
@@ -506,10 +515,18 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
           </div>
 
           <div className="mb-6 text-center">
-            <p className="mt-2 font-display text-7xl font-bold tracking-widest text-white sm:text-8xl">
-              {room.current_initials}
-            </p>
-            {room.initials_player_count > 0 && (
+            <div className="relative mx-auto max-w-lg">
+              <p className="mt-2 font-display text-7xl font-bold tracking-widest text-white sm:text-8xl">
+                {room.current_initials}
+              </p>
+              {correctFlash && (
+                <div className="correct-flash absolute inset-0 flex flex-col items-center justify-center rounded-2xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-6 backdrop-blur-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-300">Correct</p>
+                  <p className="mt-2 text-2xl font-semibold text-white sm:text-3xl">{correctFlash}</p>
+                </div>
+              )}
+            </div>
+            {room.initials_player_count > 0 && !correctFlash && (
               <p className="mt-3 text-sm text-slate-400">
                 {room.initials_player_count === 1
                   ? '1 unused player left for these initials'
@@ -517,7 +534,7 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
               </p>
             )}
             <p className="mt-3 text-sm text-emerald-400">{room.last_message}</p>
-            {feedback && <p className="mt-2 text-sm text-slate-400">{feedback}</p>}
+            {feedback && !correctFlash && <p className="mt-2 text-sm text-slate-400">{feedback}</p>}
             <p className="mt-2 text-xs text-slate-500">
               Passes {room.pass_count}/{room.players.length}
               {room.you_passed ? ' · you passed' : ''}
@@ -530,7 +547,7 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
               type="text"
               value={guess}
               onChange={(e) => setGuess(e.target.value)}
-              disabled={busy || room.you_passed}
+              disabled={busy || room.you_passed || Boolean(correctFlash)}
               autoComplete="off"
               placeholder="Type full name"
               className="w-full rounded-xl border border-court-600 bg-court-900 px-4 py-4 text-lg text-white placeholder:text-slate-600 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30 disabled:opacity-50"
@@ -538,7 +555,7 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
             <div className="mt-4 grid grid-cols-2 gap-3">
               <button
                 type="button"
-                disabled={busy || room.you_passed}
+                disabled={busy || room.you_passed || Boolean(correctFlash)}
                 onClick={() => void handlePass()}
                 className="rounded-xl border border-court-500 py-3 text-lg font-medium text-white hover:border-accent disabled:opacity-50"
               >
@@ -546,7 +563,7 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
               </button>
               <button
                 type="submit"
-                disabled={busy || room.you_passed || !guess.trim()}
+                disabled={busy || room.you_passed || !guess.trim() || Boolean(correctFlash)}
                 className="btn-primary py-3 text-lg disabled:opacity-50"
               >
                 {busy ? 'Checking...' : 'Submit'}

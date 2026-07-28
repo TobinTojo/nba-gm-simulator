@@ -46,6 +46,7 @@ export function GamePage() {
   const [leaderboardRefreshKey, setLeaderboardRefreshKey] = useState(0);
   const [profileRefreshKey, setProfileRefreshKey] = useState(0);
   const [submittingScore, setSubmittingScore] = useState(false);
+  const [correctFlash, setCorrectFlash] = useState<{ name: string; points: number } | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const phaseRef = useRef<GamePhase>('idle');
@@ -173,7 +174,7 @@ export function GamePage() {
   }, [finishGame]);
 
   useEffect(() => {
-    if (phase !== 'playing') return;
+    if (phase !== 'playing' || correctFlash) return;
 
     const interval = window.setInterval(() => {
       setTimeLeft((prev) => {
@@ -189,7 +190,7 @@ export function GamePage() {
     }, 1000);
 
     return () => window.clearInterval(interval);
-  }, [phase, endGameOnTimeout, timerGeneration]);
+  }, [phase, endGameOnTimeout, timerGeneration, correctFlash]);
 
   useEffect(() => {
     if (phase === 'playing') {
@@ -216,6 +217,7 @@ export function GamePage() {
       setReveals([]);
       setMessage('');
       setLeaderboardMessage('');
+      setCorrectFlash(null);
       submittedScoreRef.current = null;
       setTimerGeneration((n) => n + 1);
       setMode('solo');
@@ -229,7 +231,7 @@ export function GamePage() {
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (phase !== 'playing' || submitting || !guess.trim()) return;
+    if (phase !== 'playing' || submitting || !guess.trim() || correctFlash) return;
 
     setSubmitting(true);
     setError(null);
@@ -267,12 +269,18 @@ export function GamePage() {
       setStreak((prev) => prev + 1);
       setUsedPlayerIds((prev) => [...prev, result.matched_nba_id]);
       setSessionRounds((prev) => [...prev, round]);
+      setGuess('');
+      setCorrectFlash({ name: result.matched_name, points: result.points });
+      setMessage(`+${result.points} for ${result.matched_name}`);
+      setSubmitting(false);
+
+      await new Promise((resolve) => window.setTimeout(resolve, 1100));
+
       setInitials(result.next_initials);
       setInitialsPlayerCount(result.next_initials_player_count);
-      setGuess('');
       setTimeLeft(timerSeconds);
       setTimerGeneration((n) => n + 1);
-      setMessage(`+${result.points} for ${result.matched_name} (${submittedTimeLeft}s left)`);
+      setCorrectFlash(null);
     } catch (err) {
       await finishGame(
         err instanceof Error ? err.message : 'Something went wrong.',
@@ -408,13 +416,27 @@ export function GamePage() {
 
                     <div className="mb-8 text-center">
                       <p className="text-sm uppercase tracking-widest text-slate-500">Initials</p>
-                      <p className="mt-2 font-display text-7xl tracking-widest text-white sm:text-8xl">
-                        {initials}
-                      </p>
-                      {initialsPlayerCount > 0 && (
+                      <div className="relative mx-auto mt-2 max-w-lg">
+                        <p className="font-display text-7xl tracking-widest text-white sm:text-8xl">
+                          {initials}
+                        </p>
+                        {correctFlash && (
+                          <div className="correct-flash absolute inset-0 flex flex-col items-center justify-center rounded-2xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-6 backdrop-blur-sm">
+                            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-300">
+                              Correct · +{correctFlash.points}
+                            </p>
+                            <p className="mt-2 text-2xl font-semibold text-white sm:text-3xl">
+                              {correctFlash.name}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      {initialsPlayerCount > 0 && !correctFlash && (
                         <p className="mt-3 text-sm text-slate-400">{initialsCountLabel}</p>
                       )}
-                      {message && <p className="mt-3 text-sm text-emerald-400">{message}</p>}
+                      {message && !correctFlash && (
+                        <p className="mt-3 text-sm text-emerald-400">{message}</p>
+                      )}
                     </div>
 
                     <form onSubmit={(e) => void handleSubmit(e)} className="mt-auto">
@@ -427,14 +449,14 @@ export function GamePage() {
                         type="text"
                         value={guess}
                         onChange={(e) => setGuess(e.target.value)}
-                        disabled={submitting}
+                        disabled={submitting || Boolean(correctFlash)}
                         autoComplete="off"
                         placeholder="Type full name (e.g. Michael Jordan)"
-                        className="w-full rounded-xl border border-white/10 bg-court-950/80 px-4 py-4 text-lg text-white placeholder:text-slate-600 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+                        className="w-full rounded-xl border border-white/10 bg-court-950/80 px-4 py-4 text-lg text-white placeholder:text-slate-600 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30 disabled:opacity-50"
                       />
                       <button
                         type="submit"
-                        disabled={submitting || !guess.trim()}
+                        disabled={submitting || !guess.trim() || Boolean(correctFlash)}
                         className="btn-primary mt-4 w-full py-3 text-lg disabled:opacity-50"
                       >
                         {submitting ? 'Checking...' : 'Submit'}

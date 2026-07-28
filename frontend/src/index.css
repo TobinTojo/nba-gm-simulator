@@ -74,28 +74,50 @@
     pointer-events: none;
   }
 
+  .btn-leave {
+    @apply inline-flex items-center justify-center rounded-xl border border-red-400/50 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-300 transition duration-200 hover:-translate-y-0.5 hover:border-red-300 hover:bg-red-500/20 hover:text-red-200 hover:shadow-[0_8px_20px_rgba(239,68,68,0.2)] focus:outline-none focus:ring-2 focus:ring-red-400/40 active:translate-y-0;
+  }
+
   .ball-bounce {
-    animation: ballBounce 0.9s ease-in-out infinite;
-    transform-origin: center bottom;
-    filter: drop-shadow(0 18px 16px rgba(0, 0, 0, 0.35));
+    animation: ballBounce 2.2s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+    transform-origin: center center;
+    filter: drop-shadow(0 14px 12px rgba(0, 0, 0, 0.4));
+  }
+
+  .correct-flash {
+    animation: correctPop 0.45s ease-out both;
   }
 }
 
 @keyframes ballBounce {
-  0%,
-  100% {
-    transform: translateY(0) scale(1, 1);
+  0% {
+    transform: translateY(0) rotate(0deg);
   }
-  40% {
-    transform: translateY(-36px) scale(1, 1.04);
+  35% {
+    transform: translateY(-28px) rotate(110deg);
   }
   50% {
-    transform: translateY(0) scale(1.08, 0.9);
+    transform: translateY(0) rotate(160deg);
   }
-  65% {
-    transform: translateY(-14px) scale(1, 1.02);
+  70% {
+    transform: translateY(-12px) rotate(230deg);
   }
-  75% {
-    transform: translateY(0) scale(1.04, 0.94);
+  100% {
+    transform: translateY(0) rotate(360deg);
+  }
+}
+
+@keyframes correctPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.86);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
   }
 }
