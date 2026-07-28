@@ -21,7 +21,7 @@ A fast-paced NBA trivia game. You get **30 seconds** to guess an all-time NBA pl
 - Close spellings still count (e.g. "Lebron James" → LeBron James)
 - Suffixes like Jr., III are handled correctly (Otto Porter Jr. = **OP**)
 - On game over, see every valid player for each round with their career span
-- **Play a Friend:** private room, same 10 initials, first correct answer wins each round
+- **Play a Friend:** private room (Google sign-in required), same 10 initials, first correct answer wins each round
 
 ---
 

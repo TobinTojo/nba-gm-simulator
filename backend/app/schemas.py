@@ -583,20 +583,12 @@ class MultiplayerPlayerState(BaseModel):
     score: int = 0
 
 
-class MultiplayerCreateRequest(BaseModel):
-    player_id: str = Field(min_length=8, max_length=64)
-    display_name: str = Field(min_length=1, max_length=40)
-
-
 class MultiplayerJoinRequest(BaseModel):
     code: str = Field(min_length=4, max_length=8)
-    player_id: str = Field(min_length=8, max_length=64)
-    display_name: str = Field(min_length=1, max_length=40)
 
 
 class MultiplayerGuessRequest(BaseModel):
     code: str = Field(min_length=4, max_length=8)
-    player_id: str = Field(min_length=8, max_length=64)
     guess: str = Field(min_length=2, max_length=80)
 
 

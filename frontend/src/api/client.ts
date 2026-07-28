@@ -62,23 +62,25 @@ export const api = {
       headers: { Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify({ score }),
     }),
-  createMultiplayerRoom: (playerId: string, displayName: string) =>
+  createMultiplayerRoom: (accessToken: string) =>
     request<MultiplayerRoomResponse>('/multiplayer/create', {
       method: 'POST',
-      body: JSON.stringify({ player_id: playerId, display_name: displayName }),
+      headers: { Authorization: `Bearer ${accessToken}` },
     }),
-  joinMultiplayerRoom: (code: string, playerId: string, displayName: string) =>
+  joinMultiplayerRoom: (code: string, accessToken: string) =>
     request<MultiplayerRoomResponse>('/multiplayer/join', {
       method: 'POST',
-      body: JSON.stringify({ code, player_id: playerId, display_name: displayName }),
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ code }),
     }),
-  getMultiplayerRoom: (code: string, playerId: string) =>
-    request<MultiplayerRoomResponse>(
-      `/multiplayer/room/${encodeURIComponent(code)}?player_id=${encodeURIComponent(playerId)}`,
-    ),
-  submitMultiplayerGuess: (code: string, playerId: string, guess: string) =>
+  getMultiplayerRoom: (code: string, accessToken: string) =>
+    request<MultiplayerRoomResponse>(`/multiplayer/room/${encodeURIComponent(code)}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }),
+  submitMultiplayerGuess: (code: string, guess: string, accessToken: string) =>
     request<MultiplayerRoomResponse>('/multiplayer/guess', {
       method: 'POST',
-      body: JSON.stringify({ code, player_id: playerId, guess }),
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ code, guess }),
     }),
 };
