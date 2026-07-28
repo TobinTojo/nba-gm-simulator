@@ -44,8 +44,8 @@ export function LeaderboardPanel({
   }
 
   return (
-    <div className="rounded-xl border border-court-700 bg-court-900/60 p-4">
-      <p className="text-xs uppercase tracking-wider text-slate-500">{title}</p>
+    <div className="rounded-2xl border border-white/10 bg-court-900/70 p-5 shadow-xl shadow-black/20 backdrop-blur-md">
+      <p className="text-xs uppercase tracking-[0.25em] text-slate-500">{title}</p>
 
       {loading ? (
         <p className="mt-3 text-sm text-slate-400">Loading leaderboard...</p>
@@ -54,16 +54,16 @@ export function LeaderboardPanel({
       ) : entries.length === 0 ? (
         <p className="mt-3 text-sm text-slate-400">No scores yet. Be the first!</p>
       ) : (
-        <ol className="mt-3 space-y-2">
+        <ol className="mt-4 space-y-2.5">
           {entries.map((entry) => (
             <li
               key={`${entry.rank}-${entry.display_name}`}
-              className={`flex items-center justify-between gap-3 text-sm ${
-                entry.is_you ? 'font-medium text-accent' : 'text-slate-300'
+              className={`flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm ${
+                entry.is_you ? 'bg-accent/10 font-medium text-accent' : 'text-slate-300'
               }`}
             >
               <span className="flex min-w-0 items-center gap-3">
-                <span className="w-6 shrink-0 text-slate-500">#{entry.rank}</span>
+                <span className="w-6 shrink-0 font-display text-lg text-slate-500">#{entry.rank}</span>
                 <span className="truncate">{entry.display_name}</span>
               </span>
               <span className="shrink-0 tabular-nums">{entry.high_score} pts</span>

@@ -86,6 +86,14 @@ export interface SubmitScoreResponse {
   rank: number | null;
 }
 
+export interface ProfileResponse {
+  display_name: string;
+  high_score: number;
+  friendly_wins: number;
+  rank: number | null;
+  updated_at: string | null;
+}
+
 export interface MultiplayerPlayerState {
   player_id: string;
   display_name: string;

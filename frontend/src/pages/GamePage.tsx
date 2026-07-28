@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/api/client';
+import { AboutSection } from '@/components/AboutSection';
+import { LandingHero } from '@/components/LandingHero';
+import { SiteNav } from '@/components/SiteNav';
 import { useLeaderboardAuth } from '@/hooks/useLeaderboardAuth';
 import { LeaderboardPanel } from '@/LeaderboardPanel';
 import { MultiplayerRoom } from '@/MultiplayerRoom';
@@ -41,6 +44,7 @@ export function GamePage() {
   const [timerGeneration, setTimerGeneration] = useState(0);
   const [leaderboardMessage, setLeaderboardMessage] = useState('');
   const [leaderboardRefreshKey, setLeaderboardRefreshKey] = useState(0);
+  const [profileRefreshKey, setProfileRefreshKey] = useState(0);
   const [submittingScore, setSubmittingScore] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -79,6 +83,7 @@ export function GamePage() {
   useEffect(() => {
     if (submitNotice) {
       setLeaderboardRefreshKey((value) => value + 1);
+      setProfileRefreshKey((value) => value + 1);
     }
   }, [submitNotice]);
 
@@ -141,6 +146,7 @@ export function GamePage() {
           setLeaderboardMessage(`Your best score remains ${result.high_score} pts`);
         }
         setLeaderboardRefreshKey((value) => value + 1);
+        setProfileRefreshKey((value) => value + 1);
       })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : 'Could not save score to the leaderboard.';
@@ -285,6 +291,17 @@ export function GamePage() {
     }
   }
 
+  function goHome() {
+    setMode('home');
+    setPhase('idle');
+    setError(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function scrollAbout() {
+    document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' });
+  }
+
   const timerPct = (timeLeft / timerSeconds) * 100;
   const lowTimeThreshold = Math.max(3, Math.floor(timerSeconds / 6));
   const initialsCountLabel =
@@ -293,295 +310,305 @@ export function GamePage() {
   const revealsByInitials = new Map(reveals.map((entry) => [entry.initials, entry.players]));
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-3xl flex-col px-4 py-10">
-      <header className="mb-10 text-center">
-        <p className="text-sm font-semibold uppercase tracking-[0.3em] text-accent">NBA Initials</p>
-        <h1 className="mt-2 font-display text-4xl font-bold text-white sm:text-5xl">Name Rush</h1>
-        <p className="mt-3 text-slate-400">All-time NBA · {playerCount || '…'} players</p>
-      </header>
+    <div className="flex min-h-screen flex-col">
+      <SiteNav
+        mode={mode}
+        onGoHome={goHome}
+        onPlaySolo={() => void handleStart()}
+        onPlayFriends={() => {
+          setMode('versus');
+          setPhase('idle');
+        }}
+        onScrollAbout={scrollAbout}
+        enabled={leaderboardEnabled}
+        user={user}
+        session={session}
+        authLoading={authLoading}
+        signInWithGoogle={signInWithGoogle}
+        signOut={signOut}
+        profileRefreshKey={profileRefreshKey}
+      />
 
-      <section className="card flex flex-1 flex-col p-6 sm:p-8">
-        {mode === 'versus' ? (
-          <MultiplayerRoom onExit={() => setMode('home')} />
-        ) : loading && mode === 'home' ? (
-          <p className="text-center text-slate-400">Loading players...</p>
-        ) : mode === 'home' ? (
-          <div className="flex flex-1 flex-col items-center justify-center text-center">
-            <p className="max-w-md text-lg text-slate-300">
-              You get <strong className="text-white">{timerSeconds} seconds</strong> per initials. Guess any NBA
-              player in history from their <strong className="text-white">initials</strong>. Faster answers earn
-              more points.
-            </p>
-            <ul className="mt-6 space-y-2 text-left text-sm text-slate-400">
-              <li>✓ Answer fast → up to {timerSeconds} points per correct name</li>
-              <li>✓ Correct name → new initials, timer resets to {timerSeconds}s</li>
-              <li>✓ Close spelling still counts if it matches the initials</li>
-              <li>✗ Wrong name or invalid player → game over</li>
-              <li>✗ Time runs out → game over</li>
-            </ul>
-            <div className="mt-8 flex w-full max-w-sm flex-col gap-3">
-              <button type="button" onClick={() => void handleStart()} className="btn-primary px-10 py-3 text-lg">
-                Start Game
-              </button>
-              <button
-                type="button"
-                onClick={() => setMode('versus')}
-                className="rounded-xl border border-court-500 px-10 py-3 text-lg font-medium text-white hover:border-accent"
-              >
-                Play a Friend
-              </button>
-            </div>
-
-            {leaderboardEnabled && (
-              <div className="mt-10 w-full max-w-md">
-                {submitNotice && (
-                  <p className="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
-                    {submitNotice}
-                  </p>
-                )}
-                <LeaderboardPanel accessToken={session?.access_token} refreshKey={leaderboardRefreshKey} />
-              </div>
-            )}
-          </div>
-        ) : (
-          <>
-            {phase === 'playing' && (
-              <>
-                <div className="mb-8 flex items-center justify-between gap-4">
+      {mode === 'home' ? (
+        <>
+          <LandingHero
+            playerCount={playerCount}
+            timerSeconds={timerSeconds}
+            onPlaySolo={() => void handleStart()}
+            onPlayFriends={() => setMode('versus')}
+          />
+          <AboutSection />
+          {leaderboardEnabled && (
+            <section className="border-t border-white/5 py-16">
+              <div className="mx-auto max-w-6xl px-4 sm:px-6">
+                <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
                   <div>
-                    <p className="text-xs uppercase tracking-wider text-slate-500">Score</p>
-                    <p className="text-3xl font-bold text-white">{score}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.35em] text-accent">Standings</p>
+                    <h2 className="mt-2 font-display text-4xl tracking-wide text-white">Leaderboard</h2>
                   </div>
-                  <div className="text-center">
-                    <p className="text-xs uppercase tracking-wider text-slate-500">Streak</p>
-                    <p className="text-3xl font-bold text-accent">{streak}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs uppercase tracking-wider text-slate-500">Time</p>
-                    <p
-                      className={`text-3xl font-bold ${timeLeft <= lowTimeThreshold ? 'text-red-400' : 'text-white'}`}
-                    >
-                      {timeLeft}s
+                  {submitNotice && (
+                    <p className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300">
+                      {submitNotice}
                     </p>
-                  </div>
-                </div>
-
-                <div className="mb-8 h-2 overflow-hidden rounded-full bg-court-800">
-                  <div
-                    className={`h-full transition-all duration-1000 ease-linear ${
-                      timeLeft <= lowTimeThreshold ? 'bg-red-500' : 'bg-accent'
-                    }`}
-                    style={{ width: `${timerPct}%` }}
-                  />
-                </div>
-
-                <div className="mb-8 text-center">
-                  <p className="text-sm uppercase tracking-widest text-slate-500">Initials</p>
-                  <p className="mt-2 font-display text-7xl font-bold tracking-widest text-white sm:text-8xl">
-                    {initials}
-                  </p>
-                  {initialsPlayerCount > 0 && (
-                    <p className="mt-3 text-sm text-slate-400">{initialsCountLabel}</p>
                   )}
-                  {message && <p className="mt-3 text-sm text-emerald-400">{message}</p>}
                 </div>
+                <div className="mx-auto max-w-lg">
+                  <LeaderboardPanel accessToken={session?.access_token} refreshKey={leaderboardRefreshKey} />
+                </div>
+              </div>
+            </section>
+          )}
+          <footer className="border-t border-white/5 py-8 text-center text-xs text-slate-600">
+            Faster answers = more points · Up to {timerSeconds} pts per correct guess
+          </footer>
+        </>
+      ) : (
+        <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 py-8 sm:px-6 sm:py-10">
+          <section className="card flex flex-1 flex-col p-6 sm:p-8 animate-slide-up">
+            {mode === 'versus' ? (
+              <MultiplayerRoom
+                onExit={goHome}
+                onMatchFinished={() => setProfileRefreshKey((value) => value + 1)}
+              />
+            ) : loading && phase === 'idle' ? (
+              <p className="text-center text-slate-400">Loading players...</p>
+            ) : (
+              <>
+                {phase === 'playing' && (
+                  <>
+                    <div className="mb-8 flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-xs uppercase tracking-wider text-slate-500">Score</p>
+                        <p className="font-display text-4xl text-white">{score}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs uppercase tracking-wider text-slate-500">Streak</p>
+                        <p className="font-display text-4xl text-accent">{streak}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs uppercase tracking-wider text-slate-500">Time</p>
+                        <p
+                          className={`font-display text-4xl ${
+                            timeLeft <= lowTimeThreshold ? 'text-red-400' : 'text-white'
+                          }`}
+                        >
+                          {timeLeft}s
+                        </p>
+                      </div>
+                    </div>
 
-                <form onSubmit={(e) => void handleSubmit(e)} className="mt-auto">
-                  <label htmlFor="guess" className="sr-only">
-                    Player name
-                  </label>
-                  <input
-                    ref={inputRef}
-                    id="guess"
-                    type="text"
-                    value={guess}
-                    onChange={(e) => setGuess(e.target.value)}
-                    disabled={submitting}
-                    autoComplete="off"
-                    placeholder="Type full name (e.g. Michael Jordan)"
-                    className="w-full rounded-xl border border-court-600 bg-court-900 px-4 py-4 text-lg text-white placeholder:text-slate-600 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
-                  />
-                  <button
-                    type="submit"
-                    disabled={submitting || !guess.trim()}
-                    className="btn-primary mt-4 w-full py-3 text-lg disabled:opacity-50"
-                  >
-                    {submitting ? 'Checking...' : 'Submit'}
-                  </button>
-                </form>
+                    <div className="mb-8 h-2 overflow-hidden rounded-full bg-court-800">
+                      <div
+                        className={`h-full transition-all duration-1000 ease-linear ${
+                          timeLeft <= lowTimeThreshold ? 'bg-red-500' : 'bg-accent'
+                        }`}
+                        style={{ width: `${timerPct}%` }}
+                      />
+                    </div>
+
+                    <div className="mb-8 text-center">
+                      <p className="text-sm uppercase tracking-widest text-slate-500">Initials</p>
+                      <p className="mt-2 font-display text-7xl tracking-widest text-white sm:text-8xl">
+                        {initials}
+                      </p>
+                      {initialsPlayerCount > 0 && (
+                        <p className="mt-3 text-sm text-slate-400">{initialsCountLabel}</p>
+                      )}
+                      {message && <p className="mt-3 text-sm text-emerald-400">{message}</p>}
+                    </div>
+
+                    <form onSubmit={(e) => void handleSubmit(e)} className="mt-auto">
+                      <label htmlFor="guess" className="sr-only">
+                        Player name
+                      </label>
+                      <input
+                        ref={inputRef}
+                        id="guess"
+                        type="text"
+                        value={guess}
+                        onChange={(e) => setGuess(e.target.value)}
+                        disabled={submitting}
+                        autoComplete="off"
+                        placeholder="Type full name (e.g. Michael Jordan)"
+                        className="w-full rounded-xl border border-white/10 bg-court-950/80 px-4 py-4 text-lg text-white placeholder:text-slate-600 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+                      />
+                      <button
+                        type="submit"
+                        disabled={submitting || !guess.trim()}
+                        className="btn-primary mt-4 w-full py-3 text-lg disabled:opacity-50"
+                      >
+                        {submitting ? 'Checking...' : 'Submit'}
+                      </button>
+                    </form>
+                  </>
+                )}
+
+                {phase === 'gameover' && (
+                  <div className="flex flex-1 flex-col">
+                    <div className="text-center">
+                      <p className="text-sm uppercase tracking-wider text-red-400">Game Over</p>
+                      <p className="mt-2 text-2xl font-bold text-white">{message}</p>
+                      <p className="mt-4 font-display text-5xl text-accent">{score} pts</p>
+                      <p className="mt-1 text-slate-400">{streak} correct in a row</p>
+
+                      {leaderboardEnabled && (
+                        <div className="mt-6 w-full max-w-md text-left">
+                          {authLoading || submittingScore ? (
+                            <p className="text-sm text-slate-400">Saving score...</p>
+                          ) : user ? (
+                            <div className="space-y-2">
+                              <p className="text-sm text-slate-300">
+                                Signed in as{' '}
+                                <span className="text-white">
+                                  {user.user_metadata?.user_name ??
+                                    user.user_metadata?.full_name ??
+                                    user.email ??
+                                    'Player'}
+                                </span>
+                              </p>
+                              {leaderboardMessage && (
+                                <p className="text-sm text-emerald-400">{leaderboardMessage}</p>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              <p className="text-sm text-slate-400">
+                                Sign in with Google to save this score to the leaderboard.
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => void signInWithGoogle(score)}
+                                className="btn-primary w-full py-3"
+                              >
+                                Sign in with Google
+                              </button>
+                            </div>
+                          )}
+
+                          <div className="mt-6">
+                            <LeaderboardPanel
+                              accessToken={session?.access_token}
+                              refreshKey={leaderboardRefreshKey}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {sessionRounds.length > 0 && (
+                      <div className="mt-8 space-y-6 border-t border-white/10 pt-6">
+                        <p className="text-xs uppercase tracking-wider text-slate-500">Round Recap</p>
+                        {sessionRounds.map((round, index) => {
+                          const players = revealsByInitials.get(round.initials) ?? [];
+                          return (
+                            <div
+                              key={`${round.initials}-${index}`}
+                              className="rounded-xl border border-white/10 bg-court-950/50 p-4"
+                            >
+                              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                                <p className="font-display text-2xl tracking-widest text-white">
+                                  {round.initials}
+                                </p>
+                                <p className="text-sm text-slate-400">
+                                  {round.success
+                                    ? `Answered in ${round.time_spent}s · +${round.points} pts`
+                                    : round.guess
+                                      ? `Failed after ${round.time_spent}s`
+                                      : `Timed out after ${round.time_spent}s`}
+                                </p>
+                              </div>
+
+                              <p className="mt-2 text-sm text-slate-300">
+                                {round.success ? (
+                                  <>
+                                    <span className="text-emerald-400">✓</span> {round.matched_name}
+                                  </>
+                                ) : round.guess ? (
+                                  <>
+                                    <span className="text-red-400">✗</span> Guessed: {round.guess}
+                                  </>
+                                ) : (
+                                  <span className="text-red-400">✗ No answer submitted</span>
+                                )}
+                              </p>
+
+                              {players.length > 0 && (
+                                <div className="mt-3">
+                                  <p className="text-xs uppercase tracking-wider text-slate-500">
+                                    {players.length === 1
+                                      ? '1 valid player'
+                                      : `${players.length} valid players`}
+                                  </p>
+                                  <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto text-sm">
+                                    {players.map((player) => (
+                                      <li
+                                        key={player.full_name}
+                                        className={`flex items-start justify-between gap-3 ${
+                                          round.success && player.full_name === round.matched_name
+                                            ? 'text-emerald-400'
+                                            : 'text-slate-400'
+                                        }`}
+                                      >
+                                        <span
+                                          className={
+                                            round.success && player.full_name === round.matched_name
+                                              ? 'font-medium'
+                                              : ''
+                                          }
+                                        >
+                                          {player.full_name}
+                                        </span>
+                                        <span className="shrink-0 text-xs text-slate-500">
+                                          {player.career_span}
+                                        </span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <div className="mx-auto mt-8 flex flex-wrap justify-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => void handleStart()}
+                        className="btn-primary px-8 py-3"
+                      >
+                        Play Again
+                      </button>
+                      <button type="button" onClick={goHome} className="btn-ghost px-8 py-3">
+                        Back to home
+                      </button>
+                    </div>
+                  </div>
+                )}
               </>
             )}
 
-            {phase === 'gameover' && (
-              <div className="flex flex-1 flex-col">
-                <div className="text-center">
-                  <p className="text-sm uppercase tracking-wider text-red-400">Game Over</p>
-                  <p className="mt-2 text-2xl font-bold text-white">{message}</p>
-                  <p className="mt-4 text-4xl font-bold text-accent">{score} pts</p>
-                  <p className="mt-1 text-slate-400">{streak} correct in a row</p>
-
-                  {leaderboardEnabled && (
-                    <div className="mt-6 w-full max-w-md text-left">
-                      {authLoading || submittingScore ? (
-                        <p className="text-sm text-slate-400">Saving score...</p>
-                      ) : user ? (
-                        <div className="space-y-2">
-                          <p className="text-sm text-slate-300">
-                            Signed in as{' '}
-                            <span className="text-white">
-                              {user.user_metadata?.user_name ??
-                                user.user_metadata?.full_name ??
-                                user.email ??
-                                'Player'}
-                            </span>
-                          </p>
-                          {leaderboardMessage && (
-                            <p className="text-sm text-emerald-400">{leaderboardMessage}</p>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => void signOut()}
-                            className="text-xs text-slate-500 underline hover:text-slate-300"
-                          >
-                            Sign out
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          <p className="text-sm text-slate-400">
-                            Sign in with Google to save this score to the leaderboard.
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => void signInWithGoogle(score)}
-                            className="btn-primary w-full py-3"
-                          >
-                            Sign in with Google
-                          </button>
-                        </div>
-                      )}
-
-                      <div className="mt-6">
-                        <LeaderboardPanel
-                          accessToken={session?.access_token}
-                          refreshKey={leaderboardRefreshKey}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {sessionRounds.length > 0 && (
-                  <div className="mt-8 space-y-6 border-t border-court-700 pt-6">
-                    <p className="text-xs uppercase tracking-wider text-slate-500">Round Recap</p>
-                    {sessionRounds.map((round, index) => {
-                      const players = revealsByInitials.get(round.initials) ?? [];
-                      return (
-                        <div
-                          key={`${round.initials}-${index}`}
-                          className="rounded-xl border border-court-700 bg-court-900/60 p-4"
-                        >
-                          <div className="flex flex-wrap items-baseline justify-between gap-2">
-                            <p className="font-display text-2xl font-bold tracking-widest text-white">
-                              {round.initials}
-                            </p>
-                            <p className="text-sm text-slate-400">
-                              {round.success
-                                ? `Answered in ${round.time_spent}s · +${round.points} pts`
-                                : round.guess
-                                  ? `Failed after ${round.time_spent}s`
-                                  : `Timed out after ${round.time_spent}s`}
-                            </p>
-                          </div>
-
-                          <p className="mt-2 text-sm text-slate-300">
-                            {round.success ? (
-                              <>
-                                <span className="text-emerald-400">✓</span> {round.matched_name}
-                              </>
-                            ) : round.guess ? (
-                              <>
-                                <span className="text-red-400">✗</span> Guessed: {round.guess}
-                              </>
-                            ) : (
-                              <span className="text-red-400">✗ No answer submitted</span>
-                            )}
-                          </p>
-
-                          {players.length > 0 && (
-                            <div className="mt-3">
-                              <p className="text-xs uppercase tracking-wider text-slate-500">
-                                {players.length === 1
-                                  ? '1 valid player'
-                                  : `${players.length} valid players`}
-                              </p>
-                              <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto text-sm">
-                                {players.map((player) => (
-                                  <li
-                                    key={player.full_name}
-                                    className={`flex items-start justify-between gap-3 ${
-                                      round.success && player.full_name === round.matched_name
-                                        ? 'text-emerald-400'
-                                        : 'text-slate-400'
-                                    }`}
-                                  >
-                                    <span
-                                      className={
-                                        round.success && player.full_name === round.matched_name
-                                          ? 'font-medium'
-                                          : ''
-                                      }
-                                    >
-                                      {player.full_name}
-                                    </span>
-                                    <span className="shrink-0 text-xs text-slate-500">
-                                      {player.career_span}
-                                    </span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                <div className="mx-auto mt-8 flex flex-wrap justify-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => void handleStart()}
-                    className="btn-primary px-8 py-3"
-                  >
-                    Play Again
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMode('home');
-                      setPhase('idle');
-                    }}
-                    className="rounded-xl border border-court-500 px-8 py-3 text-white hover:border-accent"
-                  >
-                    Back to menu
-                  </button>
-                </div>
-              </div>
+            {error && (
+              <p className="mt-6 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                {error}
+              </p>
             )}
-          </>
-        )}
+          </section>
+        </main>
+      )}
 
-        {error && (
-          <p className="mt-6 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-            {error}
-          </p>
-        )}
-      </section>
+      {mode === 'home' && error && (
+        <p className="mx-auto mb-8 max-w-lg rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-center text-sm text-red-300">
+          {error}
+        </p>
+      )}
 
-      <p className="mt-6 text-center text-xs text-slate-600">
-        Faster answers = more points · Up to {timerSeconds} pts per correct guess
-      </p>
+      {mode === 'home' && loading && (
+        <p className="sr-only" aria-live="polite">
+          Loading players...
+        </p>
+      )}
     </div>
   );
 }

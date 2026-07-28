@@ -6,6 +6,7 @@ import type {
   InitialsRevealResponse,
   LeaderboardResponse,
   MultiplayerRoomResponse,
+  ProfileResponse,
   SubmitScoreResponse,
 } from '@/types';
 
@@ -61,6 +62,10 @@ export const api = {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify({ score }),
+    }),
+  getProfile: (accessToken: string) =>
+    request<ProfileResponse>('/leaderboard/me', {
+      headers: { Authorization: `Bearer ${accessToken}` },
     }),
   createMultiplayerRoom: (accessToken: string, totalRounds = 9, era = 'all_time') =>
     request<MultiplayerRoomResponse>('/multiplayer/create', {

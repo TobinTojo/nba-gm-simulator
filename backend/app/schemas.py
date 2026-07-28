@@ -577,6 +577,14 @@ class SubmitScoreResponse(BaseModel):
     rank: int | None = None
 
 
+class ProfileResponse(BaseModel):
+    display_name: str = ""
+    high_score: int = 0
+    friendly_wins: int = 0
+    rank: int | None = None
+    updated_at: str | None = None
+
+
 class MultiplayerPlayerState(BaseModel):
     player_id: str
     display_name: str

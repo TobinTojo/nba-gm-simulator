@@ -18,9 +18,10 @@ const ERA_OPTIONS = [
 
 interface MultiplayerRoomProps {
   onExit: () => void;
+  onMatchFinished?: () => void;
 }
 
-export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
+export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProps) {
   const { enabled, user, session, authLoading, signInWithGoogle, signOut } = useLeaderboardAuth();
   const [joinCode, setJoinCode] = useState('');
   const [selectedRounds, setSelectedRounds] = useState<(typeof ROUND_OPTIONS)[number]>(9);
@@ -59,6 +60,19 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
 
     return () => window.clearInterval(interval);
   }, [room?.code, room?.status, accessToken]);
+
+  const finishedNotifiedRef = useRef(false);
+
+  useEffect(() => {
+    if (room?.status === 'finished') {
+      if (!finishedNotifiedRef.current) {
+        finishedNotifiedRef.current = true;
+        onMatchFinished?.();
+      }
+    } else {
+      finishedNotifiedRef.current = false;
+    }
+  }, [room?.status, onMatchFinished]);
 
   useEffect(() => {
     if (room?.status === 'playing') {
@@ -214,7 +228,7 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
       <div className="flex flex-1 flex-col items-center justify-center text-center">
         <p className="text-lg text-slate-300">Multiplayer needs Google sign-in configured.</p>
         <button type="button" onClick={onExit} className="mt-8 text-sm text-slate-500 underline">
-          Back to solo
+          Back to home
         </button>
       </div>
     );
@@ -240,7 +254,7 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
           Sign in with Google
         </button>
         <button type="button" onClick={onExit} className="mt-8 text-sm text-slate-500 underline hover:text-slate-300">
-          Back to solo
+          Back to home
         </button>
       </div>
     );
@@ -250,7 +264,7 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center text-center">
         <p className="text-sm uppercase tracking-wider text-accent">Multiplayer</p>
-        <h2 className="mt-2 font-display text-3xl font-bold text-white">Play with Friends</h2>
+        <h2 className="mt-2 font-display text-4xl tracking-wide text-white">Play with friend(s)</h2>
         <p className="mt-3 max-w-md text-slate-400">
           Up to 4 players. Pick an era, race to name players, and pass only skips when everyone
           passes.
@@ -330,7 +344,7 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
         {error && <p className="mt-4 text-sm text-red-300">{error}</p>}
 
         <button type="button" onClick={onExit} className="mt-8 text-sm text-slate-500 underline hover:text-slate-300">
-          Back to solo
+          Back to home
         </button>
       </div>
     );

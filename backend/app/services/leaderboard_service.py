@@ -260,3 +260,193 @@ def get_leaderboard(limit: int = 25, user_id: str | None = None) -> list[dict[st
                 raise
 
     return _get_via_rest(capped_limit, user_id)
+
+
+def _profile_via_rest(user_id: str) -> dict[str, Any]:
+    base = settings.supabase_url.strip().rstrip("/")
+    headers = _rest_headers()
+
+    with httpx.Client(timeout=15.0) as client:
+        response = client.get(
+            f"{base}/rest/v1/leaderboard",
+            params={
+                "user_id": f"eq.{user_id}",
+                "select": "display_name,high_score,friendly_wins,updated_at",
+            },
+            headers=headers,
+        )
+        if response.status_code >= 400:
+            # Column may not exist until migration is applied.
+            response = client.get(
+                f"{base}/rest/v1/leaderboard",
+                params={
+                    "user_id": f"eq.{user_id}",
+                    "select": "display_name,high_score,updated_at",
+                },
+                headers=headers,
+            )
+        response.raise_for_status()
+        rows = response.json()
+
+        all_resp = client.get(
+            f"{base}/rest/v1/leaderboard",
+            params={"select": "user_id,high_score,updated_at"},
+            headers=headers,
+        )
+        all_resp.raise_for_status()
+        rank = _rank_for_user(all_resp.json(), user_id)
+
+    if not rows:
+        return {
+            "display_name": "",
+            "high_score": 0,
+            "friendly_wins": 0,
+            "rank": None,
+            "updated_at": None,
+        }
+
+    row = rows[0]
+    updated_at = row.get("updated_at")
+    return {
+        "display_name": str(row.get("display_name") or ""),
+        "high_score": int(row.get("high_score") or 0),
+        "friendly_wins": int(row.get("friendly_wins") or 0),
+        "rank": rank,
+        "updated_at": updated_at if isinstance(updated_at, str) else None,
+    }
+
+
+def _profile_via_postgres(user_id: str) -> dict[str, Any]:
+    user_uuid = UUID(str(user_id))
+    with _connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            try:
+                cur.execute(
+                    """
+                    SELECT display_name, high_score, friendly_wins, updated_at
+                    FROM public.leaderboard
+                    WHERE user_id = %s
+                    """,
+                    (user_uuid,),
+                )
+            except Exception:
+                conn.rollback()
+                cur.execute(
+                    """
+                    SELECT display_name, high_score, updated_at
+                    FROM public.leaderboard
+                    WHERE user_id = %s
+                    """,
+                    (user_uuid,),
+                )
+            row = cur.fetchone()
+            if row is None:
+                return {
+                    "display_name": "",
+                    "high_score": 0,
+                    "friendly_wins": 0,
+                    "rank": None,
+                    "updated_at": None,
+                }
+
+            cur.execute(
+                """
+                SELECT rank FROM (
+                    SELECT user_id, RANK() OVER (ORDER BY high_score DESC, updated_at ASC) AS rank
+                    FROM public.leaderboard
+                ) ranked
+                WHERE user_id = %s
+                """,
+                (user_uuid,),
+            )
+            rank_row = cur.fetchone()
+
+    updated_at = row["updated_at"]
+    return {
+        "display_name": str(row["display_name"]),
+        "high_score": int(row["high_score"]),
+        "friendly_wins": int(row.get("friendly_wins") or 0),
+        "rank": int(rank_row["rank"]) if rank_row else None,
+        "updated_at": updated_at.isoformat() if isinstance(updated_at, datetime) else None,
+    }
+
+
+def get_profile(user_id: str) -> dict[str, Any]:
+    if _rest_configured():
+        try:
+            return _profile_via_rest(user_id)
+        except Exception:
+            logger.exception("Profile REST read failed for user %s", user_id)
+            if settings.leaderboard_database_url.strip():
+                return _profile_via_postgres(user_id)
+            raise
+
+    return _profile_via_postgres(user_id)
+
+
+def _increment_wins_via_rest(user_id: str, display_name: str) -> int:
+    base = settings.supabase_url.strip().rstrip("/")
+    headers = _rest_headers()
+
+    with httpx.Client(timeout=15.0) as client:
+        existing_resp = client.get(
+            f"{base}/rest/v1/leaderboard",
+            params={"user_id": f"eq.{user_id}", "select": "high_score,friendly_wins"},
+            headers=headers,
+        )
+        existing_resp.raise_for_status()
+        existing_rows = existing_resp.json()
+        previous_wins = int(existing_rows[0].get("friendly_wins") or 0) if existing_rows else 0
+        previous_high = int(existing_rows[0].get("high_score") or 0) if existing_rows else 0
+        new_wins = previous_wins + 1
+
+        upsert_resp = client.post(
+            f"{base}/rest/v1/leaderboard",
+            headers={**headers, "Prefer": "resolution=merge-duplicates,return=representation"},
+            params={"on_conflict": "user_id"},
+            json={
+                "user_id": user_id,
+                "display_name": display_name[:80],
+                "high_score": previous_high,
+                "friendly_wins": new_wins,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        upsert_resp.raise_for_status()
+
+    return new_wins
+
+
+def _increment_wins_via_postgres(user_id: str, display_name: str) -> int:
+    user_uuid = UUID(str(user_id))
+    with _connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                INSERT INTO public.leaderboard (user_id, display_name, high_score, friendly_wins, updated_at)
+                VALUES (%s, %s, 0, 1, NOW())
+                ON CONFLICT (user_id) DO UPDATE SET
+                    display_name = EXCLUDED.display_name,
+                    friendly_wins = public.leaderboard.friendly_wins + 1
+                RETURNING friendly_wins
+                """,
+                (user_uuid, display_name[:80]),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise RuntimeError("Friendly win insert did not return a row.")
+            conn.commit()
+    return int(row["friendly_wins"])
+
+
+def increment_friendly_wins(user_id: str, display_name: str) -> int:
+    if _rest_configured():
+        try:
+            return _increment_wins_via_rest(user_id, display_name)
+        except Exception:
+            logger.exception("Friendly wins REST update failed for user %s", user_id)
+            if settings.leaderboard_database_url.strip():
+                return _increment_wins_via_postgres(user_id, display_name)
+            raise
+
+    return _increment_wins_via_postgres(user_id, display_name)

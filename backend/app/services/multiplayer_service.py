@@ -52,6 +52,7 @@ class MultiplayerRoom:
     last_matched_name: str = ""
     round_started_at: float | None = None
     countdown_started_at: float | None = None
+    friendly_win_recorded: bool = False
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
 
@@ -110,6 +111,25 @@ def _current_initials(room: MultiplayerRoom) -> str:
     return room.sequence[room.round_index]
 
 
+def _record_friendly_1v1_win(room: MultiplayerRoom, winners: list[RoomPlayer]) -> None:
+    """Persist a sole win when the finished match was exactly 2 players."""
+    if room.friendly_win_recorded:
+        return
+    if len(room.players) != 2 or len(winners) != 1:
+        return
+
+    try:
+        from app.services.leaderboard_service import increment_friendly_wins, leaderboard_enabled
+
+        if not leaderboard_enabled():
+            return
+        increment_friendly_wins(winners[0].player_id, winners[0].display_name)
+        room.friendly_win_recorded = True
+    except Exception:
+        # Stats are best-effort; never block match completion.
+        pass
+
+
 def _finish_match(room: MultiplayerRoom) -> None:
     room.status = "finished"
     room.round_started_at = None
@@ -125,6 +145,8 @@ def _finish_match(room: MultiplayerRoom) -> None:
     else:
         names = ", ".join(player.display_name for player in winners)
         room.last_message = f"Draw between {names} at {top}!"
+
+    _record_friendly_1v1_win(room, winners)
 
 
 def _advance_round(room: MultiplayerRoom, message: str) -> None:
@@ -381,6 +403,7 @@ def start_match(code: str, player_id: str) -> dict[str, Any]:
         room.last_matched_name = ""
         room.round_started_at = None
         room.countdown_started_at = time.time()
+        room.friendly_win_recorded = False
         room.last_message = "Get ready..."
         room.updated_at = time.time()
         return serialize_room(room, player_id)

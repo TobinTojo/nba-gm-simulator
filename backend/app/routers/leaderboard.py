@@ -4,11 +4,18 @@ import logging
 
 from fastapi import APIRouter, Header, HTTPException, Query
 
-from app.schemas import LeaderboardResponse, LeaderboardEntry, SubmitScoreRequest, SubmitScoreResponse
+from app.schemas import (
+    LeaderboardResponse,
+    LeaderboardEntry,
+    ProfileResponse,
+    SubmitScoreRequest,
+    SubmitScoreResponse,
+)
 from app.services.auth_service import display_name_from_claims, require_auth_user
 from app.services.leaderboard_service import (
     LeaderboardUnavailable,
     get_leaderboard,
+    get_profile,
     leaderboard_enabled,
     submit_high_score,
 )
@@ -72,4 +79,31 @@ def leaderboard_submit(
         high_score=int(result["high_score"]),
         is_new_best=bool(result["is_new_best"]),
         rank=result.get("rank"),
+    )
+
+
+@router.get("/leaderboard/me", response_model=ProfileResponse)
+def leaderboard_me(
+    authorization: str | None = Header(default=None),
+) -> ProfileResponse:
+    if not leaderboard_enabled():
+        raise _leaderboard_unavailable()
+
+    claims = require_auth_user(authorization)
+    display_name = display_name_from_claims(claims)
+
+    try:
+        profile = get_profile(str(claims["sub"]))
+    except LeaderboardUnavailable as exc:
+        raise _leaderboard_unavailable() from exc
+    except Exception as exc:
+        logger.exception("Profile read failed for user %s", claims.get("sub"))
+        raise HTTPException(status_code=500, detail="Could not load profile.") from exc
+
+    return ProfileResponse(
+        display_name=str(profile.get("display_name") or display_name),
+        high_score=int(profile.get("high_score") or 0),
+        friendly_wins=int(profile.get("friendly_wins") or 0),
+        rank=profile.get("rank"),
+        updated_at=profile.get("updated_at"),
     )
