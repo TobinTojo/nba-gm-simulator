@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, Header, HTTPException, Query
 
 from app.schemas import (
+    CareerGameRequest,
     LeaderboardResponse,
     LeaderboardEntry,
     ProfileResponse,
@@ -17,6 +18,7 @@ from app.services.leaderboard_service import (
     get_leaderboard,
     get_profile,
     leaderboard_enabled,
+    record_career_game,
     submit_high_score,
 )
 
@@ -104,6 +106,52 @@ def leaderboard_me(
         display_name=str(profile.get("display_name") or display_name),
         high_score=int(profile.get("high_score") or 0),
         friendly_wins=int(profile.get("friendly_wins") or 0),
+        games_played=int(profile.get("games_played") or 0),
+        correct_answers=int(profile.get("correct_answers") or 0),
+        total_attempts=int(profile.get("total_attempts") or 0),
+        points_earned=int(profile.get("points_earned") or 0),
+        accuracy=float(profile.get("accuracy") or 0),
+        avg_points=float(profile.get("avg_points") or 0),
+        rank=profile.get("rank"),
+        updated_at=profile.get("updated_at"),
+    )
+
+
+@router.post("/leaderboard/career", response_model=ProfileResponse)
+def leaderboard_career(
+    payload: CareerGameRequest,
+    authorization: str | None = Header(default=None),
+) -> ProfileResponse:
+    if not leaderboard_enabled():
+        raise _leaderboard_unavailable()
+
+    claims = require_auth_user(authorization)
+    display_name = display_name_from_claims(claims)
+
+    try:
+        profile = record_career_game(
+            str(claims["sub"]),
+            display_name,
+            payload.score,
+            payload.correct,
+            payload.attempts,
+        )
+    except LeaderboardUnavailable as exc:
+        raise _leaderboard_unavailable() from exc
+    except Exception as exc:
+        logger.exception("Career record failed for user %s", claims.get("sub"))
+        raise HTTPException(status_code=500, detail="Could not save career stats.") from exc
+
+    return ProfileResponse(
+        display_name=str(profile.get("display_name") or display_name),
+        high_score=int(profile.get("high_score") or 0),
+        friendly_wins=int(profile.get("friendly_wins") or 0),
+        games_played=int(profile.get("games_played") or 0),
+        correct_answers=int(profile.get("correct_answers") or 0),
+        total_attempts=int(profile.get("total_attempts") or 0),
+        points_earned=int(profile.get("points_earned") or 0),
+        accuracy=float(profile.get("accuracy") or 0),
+        avg_points=float(profile.get("avg_points") or 0),
         rank=profile.get("rank"),
         updated_at=profile.get("updated_at"),
     )

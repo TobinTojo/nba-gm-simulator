@@ -4,7 +4,7 @@ interface WinnerConfettiProps {
   active: boolean;
 }
 
-/** Lightweight canvas confetti — no extra dependency. */
+/** Lightweight canvas confetti. No extra dependency. */
 export function WinnerConfetti({ active }: WinnerConfettiProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 

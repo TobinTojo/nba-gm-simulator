@@ -27,7 +27,7 @@ export function useLeaderboardAuth() {
       const result = await submitScore(parsed, activeSession.access_token);
       setSubmitNotice(
         result.is_new_best
-          ? `Score saved! New personal best — ${result.high_score} pts${result.rank ? ` (rank #${result.rank})` : ''}`
+          ? `Score saved! New personal best: ${result.high_score} pts${result.rank ? ` (rank #${result.rank})` : ''}`
           : `Score saved. Your best remains ${result.high_score} pts`,
       );
       return result;

@@ -7,16 +7,22 @@ from app.schemas import (
     MultiplayerGuessRequest,
     MultiplayerJoinRequest,
     MultiplayerPassRequest,
+    MultiplayerRematchRequest,
     MultiplayerRoomResponse,
     MultiplayerSetRoundsRequest,
     MultiplayerStartRequest,
 )
-from app.services.auth_service import display_name_from_claims, require_auth_user
+from app.services.auth_service import (
+    avatar_url_from_claims,
+    display_name_from_claims,
+    require_auth_user,
+)
 from app.services.multiplayer_service import (
     MultiplayerError,
     create_room,
     get_room,
     join_room,
+    rematch,
     set_settings,
     start_match,
     submit_guess,
@@ -42,6 +48,7 @@ def multiplayer_create(
             display_name_from_claims(claims),
             payload.total_rounds,
             payload.era,
+            avatar_url_from_claims(claims),
         )
     except MultiplayerError as exc:
         _raise(exc)
@@ -55,7 +62,12 @@ def multiplayer_join(
 ) -> MultiplayerRoomResponse:
     claims = require_auth_user(authorization)
     try:
-        room = join_room(payload.code, str(claims["sub"]), display_name_from_claims(claims))
+        room = join_room(
+            payload.code,
+            str(claims["sub"]),
+            display_name_from_claims(claims),
+            avatar_url_from_claims(claims),
+        )
     except MultiplayerError as exc:
         _raise(exc)
     return MultiplayerRoomResponse(**room)
@@ -87,6 +99,19 @@ def multiplayer_start(
     claims = require_auth_user(authorization)
     try:
         room = start_match(payload.code, str(claims["sub"]))
+    except MultiplayerError as exc:
+        _raise(exc)
+    return MultiplayerRoomResponse(**room)
+
+
+@router.post("/multiplayer/rematch", response_model=MultiplayerRoomResponse)
+def multiplayer_rematch(
+    payload: MultiplayerRematchRequest,
+    authorization: str | None = Header(default=None),
+) -> MultiplayerRoomResponse:
+    claims = require_auth_user(authorization)
+    try:
+        room = rematch(payload.code, str(claims["sub"]))
     except MultiplayerError as exc:
         _raise(exc)
     return MultiplayerRoomResponse(**room)

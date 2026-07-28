@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/api/client';
 import { AboutSection } from '@/components/AboutSection';
+import { CareerStatsPage } from '@/components/CareerStatsPage';
 import { LandingHero } from '@/components/LandingHero';
 import { SiteNav } from '@/components/SiteNav';
 import { useLeaderboardAuth } from '@/hooks/useLeaderboardAuth';
@@ -10,7 +11,7 @@ import type { GamePhase, InitialsRevealEntry, SessionRound } from '@/types';
 
 const DEFAULT_TIMER_SECONDS = 30;
 
-type AppMode = 'home' | 'solo' | 'versus';
+type AppMode = 'home' | 'solo' | 'versus' | 'stats';
 
 export function GamePage() {
   const {
@@ -128,31 +129,68 @@ export function GamePage() {
   );
 
   useEffect(() => {
-    if (phase !== 'gameover' || !leaderboardEnabled || !session?.access_token || score <= 0) {
+    if (phase !== 'gameover' || !leaderboardEnabled || !session?.access_token) {
       return;
     }
-    if (submittedScoreRef.current === score) {
+    if (submittedScoreRef.current === score && score > 0) {
+      return;
+    }
+    if (submittedScoreRef.current === -1 && score === 0) {
       return;
     }
 
-    submittedScoreRef.current = score;
+    submittedScoreRef.current = score > 0 ? score : -1;
     setSubmittingScore(true);
-    void submitScore(score, session.access_token)
-      .then((result) => {
-        if (result.is_new_best) {
+    const rounds = sessionRoundsRef.current;
+    const correct = rounds.filter((round) => round.success).length;
+    const attempts = Math.max(rounds.length, 1);
+
+    void api
+      .recordCareerGame(score, correct, attempts, session.access_token)
+      .then((profile) => {
+        if (score > 0 && profile.high_score === score) {
           setLeaderboardMessage(
-            result.rank ? `New personal best! Rank #${result.rank}` : 'New personal best saved!',
+            profile.rank ? `New personal best! Rank #${profile.rank}` : 'New personal best saved!',
           );
+        } else if (score > 0) {
+          setLeaderboardMessage(`Your best score remains ${profile.high_score} pts`);
         } else {
-          setLeaderboardMessage(`Your best score remains ${result.high_score} pts`);
+          setLeaderboardMessage('Career stats updated.');
         }
         setLeaderboardRefreshKey((value) => value + 1);
         setProfileRefreshKey((value) => value + 1);
       })
       .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : 'Could not save score to the leaderboard.';
+        if (score > 0) {
+          return submitScore(score, session.access_token)
+            .then((result) => {
+              if (result.is_new_best) {
+                setLeaderboardMessage(
+                  result.rank
+                    ? `New personal best! Rank #${result.rank}`
+                    : 'New personal best saved!',
+                );
+              } else {
+                setLeaderboardMessage(`Your best score remains ${result.high_score} pts`);
+              }
+              setLeaderboardRefreshKey((value) => value + 1);
+              setProfileRefreshKey((value) => value + 1);
+            })
+            .catch((inner: unknown) => {
+              const message =
+                inner instanceof Error
+                  ? inner.message
+                  : err instanceof Error
+                    ? err.message
+                    : 'Could not save score to the leaderboard.';
+              setLeaderboardMessage(message);
+              submittedScoreRef.current = null;
+            });
+        }
+        const message = err instanceof Error ? err.message : 'Could not save career stats.';
         setLeaderboardMessage(message);
         submittedScoreRef.current = null;
+        return undefined;
       })
       .finally(() => setSubmittingScore(false));
   }, [phase, score, session, submitScore, leaderboardEnabled]);
@@ -164,7 +202,7 @@ export function GamePage() {
       {
         initials: initialsRef.current,
         guess: guessRef.current.trim(),
-        matched_name: '—',
+        matched_name: '-',
         points: 0,
         time_spent: spent,
         success: false,
@@ -242,11 +280,11 @@ export function GamePage() {
 
       if (!result.correct || result.game_over) {
         await finishGame(
-          result.reason || 'Wrong answer — game over.',
+          result.reason || 'Wrong answer. Game over.',
           {
             initials,
             guess: guess.trim(),
-            matched_name: result.matched_name || '—',
+            matched_name: result.matched_name || '-',
             points: 0,
             time_spent: timeSpent,
             success: false,
@@ -287,7 +325,7 @@ export function GamePage() {
         {
           initials,
           guess: guess.trim(),
-          matched_name: '—',
+          matched_name: '-',
           points: 0,
           time_spent: timeSpent,
           success: false,
@@ -327,6 +365,10 @@ export function GamePage() {
           setMode('versus');
           setPhase('idle');
         }}
+        onOpenStats={() => {
+          setMode('stats');
+          setPhase('idle');
+        }}
         onScrollAbout={scrollAbout}
         enabled={leaderboardEnabled}
         user={user}
@@ -337,7 +379,17 @@ export function GamePage() {
         profileRefreshKey={profileRefreshKey}
       />
 
-      {mode === 'home' ? (
+      {mode === 'stats' ? (
+        <CareerStatsPage
+          enabled={leaderboardEnabled}
+          user={user}
+          session={session}
+          authLoading={authLoading}
+          signInWithGoogle={() => signInWithGoogle()}
+          refreshKey={profileRefreshKey}
+          onBack={goHome}
+        />
+      ) : mode === 'home' ? (
         <>
           <LandingHero
             playerCount={playerCount}

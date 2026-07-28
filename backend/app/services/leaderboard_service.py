@@ -262,21 +262,60 @@ def get_leaderboard(limit: int = 25, user_id: str | None = None) -> list[dict[st
     return _get_via_rest(capped_limit, user_id)
 
 
+def _empty_profile() -> dict[str, Any]:
+    return {
+        "display_name": "",
+        "high_score": 0,
+        "friendly_wins": 0,
+        "games_played": 0,
+        "correct_answers": 0,
+        "total_attempts": 0,
+        "points_earned": 0,
+        "accuracy": 0.0,
+        "avg_points": 0.0,
+        "rank": None,
+        "updated_at": None,
+    }
+
+
+def _with_career_rates(profile: dict[str, Any]) -> dict[str, Any]:
+    games = int(profile.get("games_played") or 0)
+    correct = int(profile.get("correct_answers") or 0)
+    attempts = int(profile.get("total_attempts") or 0)
+    points = int(profile.get("points_earned") or 0)
+    profile["games_played"] = games
+    profile["correct_answers"] = correct
+    profile["total_attempts"] = attempts
+    profile["points_earned"] = points
+    profile["accuracy"] = round((correct / attempts) * 100, 1) if attempts > 0 else 0.0
+    profile["avg_points"] = round(points / games, 1) if games > 0 else 0.0
+    return profile
+
+
 def _profile_via_rest(user_id: str) -> dict[str, Any]:
     base = settings.supabase_url.strip().rstrip("/")
     headers = _rest_headers()
+    select_full = (
+        "display_name,high_score,friendly_wins,games_played,correct_answers,"
+        "total_attempts,points_earned,updated_at"
+    )
 
     with httpx.Client(timeout=15.0) as client:
         response = client.get(
             f"{base}/rest/v1/leaderboard",
-            params={
-                "user_id": f"eq.{user_id}",
-                "select": "display_name,high_score,friendly_wins,updated_at",
-            },
+            params={"user_id": f"eq.{user_id}", "select": select_full},
             headers=headers,
         )
         if response.status_code >= 400:
-            # Column may not exist until migration is applied.
+            response = client.get(
+                f"{base}/rest/v1/leaderboard",
+                params={
+                    "user_id": f"eq.{user_id}",
+                    "select": "display_name,high_score,friendly_wins,updated_at",
+                },
+                headers=headers,
+            )
+        if response.status_code >= 400:
             response = client.get(
                 f"{base}/rest/v1/leaderboard",
                 params={
@@ -297,23 +336,23 @@ def _profile_via_rest(user_id: str) -> dict[str, Any]:
         rank = _rank_for_user(all_resp.json(), user_id)
 
     if not rows:
-        return {
-            "display_name": "",
-            "high_score": 0,
-            "friendly_wins": 0,
-            "rank": None,
-            "updated_at": None,
-        }
+        return _empty_profile()
 
     row = rows[0]
     updated_at = row.get("updated_at")
-    return {
-        "display_name": str(row.get("display_name") or ""),
-        "high_score": int(row.get("high_score") or 0),
-        "friendly_wins": int(row.get("friendly_wins") or 0),
-        "rank": rank,
-        "updated_at": updated_at if isinstance(updated_at, str) else None,
-    }
+    return _with_career_rates(
+        {
+            "display_name": str(row.get("display_name") or ""),
+            "high_score": int(row.get("high_score") or 0),
+            "friendly_wins": int(row.get("friendly_wins") or 0),
+            "games_played": int(row.get("games_played") or 0),
+            "correct_answers": int(row.get("correct_answers") or 0),
+            "total_attempts": int(row.get("total_attempts") or 0),
+            "points_earned": int(row.get("points_earned") or 0),
+            "rank": rank,
+            "updated_at": updated_at if isinstance(updated_at, str) else None,
+        }
+    )
 
 
 def _profile_via_postgres(user_id: str) -> dict[str, Any]:
@@ -323,7 +362,8 @@ def _profile_via_postgres(user_id: str) -> dict[str, Any]:
             try:
                 cur.execute(
                     """
-                    SELECT display_name, high_score, friendly_wins, updated_at
+                    SELECT display_name, high_score, friendly_wins, games_played,
+                           correct_answers, total_attempts, points_earned, updated_at
                     FROM public.leaderboard
                     WHERE user_id = %s
                     """,
@@ -333,7 +373,7 @@ def _profile_via_postgres(user_id: str) -> dict[str, Any]:
                 conn.rollback()
                 cur.execute(
                     """
-                    SELECT display_name, high_score, updated_at
+                    SELECT display_name, high_score, friendly_wins, updated_at
                     FROM public.leaderboard
                     WHERE user_id = %s
                     """,
@@ -341,13 +381,7 @@ def _profile_via_postgres(user_id: str) -> dict[str, Any]:
                 )
             row = cur.fetchone()
             if row is None:
-                return {
-                    "display_name": "",
-                    "high_score": 0,
-                    "friendly_wins": 0,
-                    "rank": None,
-                    "updated_at": None,
-                }
+                return _empty_profile()
 
             cur.execute(
                 """
@@ -362,13 +396,19 @@ def _profile_via_postgres(user_id: str) -> dict[str, Any]:
             rank_row = cur.fetchone()
 
     updated_at = row["updated_at"]
-    return {
-        "display_name": str(row["display_name"]),
-        "high_score": int(row["high_score"]),
-        "friendly_wins": int(row.get("friendly_wins") or 0),
-        "rank": int(rank_row["rank"]) if rank_row else None,
-        "updated_at": updated_at.isoformat() if isinstance(updated_at, datetime) else None,
-    }
+    return _with_career_rates(
+        {
+            "display_name": str(row["display_name"]),
+            "high_score": int(row["high_score"]),
+            "friendly_wins": int(row.get("friendly_wins") or 0),
+            "games_played": int(row.get("games_played") or 0),
+            "correct_answers": int(row.get("correct_answers") or 0),
+            "total_attempts": int(row.get("total_attempts") or 0),
+            "points_earned": int(row.get("points_earned") or 0),
+            "rank": int(rank_row["rank"]) if rank_row else None,
+            "updated_at": updated_at.isoformat() if isinstance(updated_at, datetime) else None,
+        }
+    )
 
 
 def get_profile(user_id: str) -> dict[str, Any]:
@@ -382,6 +422,116 @@ def get_profile(user_id: str) -> dict[str, Any]:
             raise
 
     return _profile_via_postgres(user_id)
+
+
+def _record_career_via_rest(
+    user_id: str,
+    display_name: str,
+    score: int,
+    correct: int,
+    attempts: int,
+) -> dict[str, Any]:
+    base = settings.supabase_url.strip().rstrip("/")
+    headers = _rest_headers()
+    correct = max(0, correct)
+    attempts = max(correct, attempts)
+
+    with httpx.Client(timeout=15.0) as client:
+        existing_resp = client.get(
+            f"{base}/rest/v1/leaderboard",
+            params={
+                "user_id": f"eq.{user_id}",
+                "select": "high_score,friendly_wins,games_played,correct_answers,total_attempts,points_earned",
+            },
+            headers=headers,
+        )
+        if existing_resp.status_code >= 400:
+            existing_resp = client.get(
+                f"{base}/rest/v1/leaderboard",
+                params={"user_id": f"eq.{user_id}", "select": "high_score,friendly_wins"},
+                headers=headers,
+            )
+        existing_resp.raise_for_status()
+        existing_rows = existing_resp.json()
+        previous = existing_rows[0] if existing_rows else {}
+        previous_high = int(previous.get("high_score") or 0)
+        new_high = max(previous_high, score)
+        payload = {
+            "user_id": user_id,
+            "display_name": display_name[:80],
+            "high_score": new_high,
+            "friendly_wins": int(previous.get("friendly_wins") or 0),
+            "games_played": int(previous.get("games_played") or 0) + 1,
+            "correct_answers": int(previous.get("correct_answers") or 0) + correct,
+            "total_attempts": int(previous.get("total_attempts") or 0) + attempts,
+            "points_earned": int(previous.get("points_earned") or 0) + score,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        upsert_resp = client.post(
+            f"{base}/rest/v1/leaderboard",
+            headers={**headers, "Prefer": "resolution=merge-duplicates,return=representation"},
+            params={"on_conflict": "user_id"},
+            json=payload,
+        )
+        upsert_resp.raise_for_status()
+
+    return get_profile(user_id)
+
+
+def _record_career_via_postgres(
+    user_id: str,
+    display_name: str,
+    score: int,
+    correct: int,
+    attempts: int,
+) -> dict[str, Any]:
+    user_uuid = UUID(str(user_id))
+    correct = max(0, correct)
+    attempts = max(correct, attempts)
+    with _connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                INSERT INTO public.leaderboard (
+                    user_id, display_name, high_score, friendly_wins,
+                    games_played, correct_answers, total_attempts, points_earned, updated_at
+                )
+                VALUES (%s, %s, %s, 0, 1, %s, %s, %s, NOW())
+                ON CONFLICT (user_id) DO UPDATE SET
+                    display_name = EXCLUDED.display_name,
+                    high_score = GREATEST(public.leaderboard.high_score, EXCLUDED.high_score),
+                    games_played = public.leaderboard.games_played + 1,
+                    correct_answers = public.leaderboard.correct_answers + EXCLUDED.correct_answers,
+                    total_attempts = public.leaderboard.total_attempts + EXCLUDED.total_attempts,
+                    points_earned = public.leaderboard.points_earned + EXCLUDED.points_earned,
+                    updated_at = CASE
+                        WHEN EXCLUDED.high_score > public.leaderboard.high_score THEN NOW()
+                        ELSE public.leaderboard.updated_at
+                    END
+                """,
+                (user_uuid, display_name[:80], score, correct, attempts, score),
+            )
+            conn.commit()
+    return get_profile(user_id)
+
+
+def record_career_game(
+    user_id: str,
+    display_name: str,
+    score: int,
+    correct: int,
+    attempts: int,
+) -> dict[str, Any]:
+    if _rest_configured():
+        try:
+            return _record_career_via_rest(user_id, display_name, score, correct, attempts)
+        except Exception:
+            logger.exception("Career REST update failed for user %s", user_id)
+            if settings.leaderboard_database_url.strip():
+                return _record_career_via_postgres(user_id, display_name, score, correct, attempts)
+            raise
+
+    return _record_career_via_postgres(user_id, display_name, score, correct, attempts)
 
 
 def _increment_wins_via_rest(user_id: str, display_name: str) -> int:

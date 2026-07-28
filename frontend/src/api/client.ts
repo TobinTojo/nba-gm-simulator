@@ -67,6 +67,17 @@ export const api = {
     request<ProfileResponse>('/leaderboard/me', {
       headers: { Authorization: `Bearer ${accessToken}` },
     }),
+  recordCareerGame: (
+    score: number,
+    correct: number,
+    attempts: number,
+    accessToken: string,
+  ) =>
+    request<ProfileResponse>('/leaderboard/career', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ score, correct, attempts }),
+    }),
   createMultiplayerRoom: (accessToken: string, totalRounds = 9, era = 'all_time') =>
     request<MultiplayerRoomResponse>('/multiplayer/create', {
       method: 'POST',
@@ -95,6 +106,12 @@ export const api = {
     }),
   startMultiplayerMatch: (code: string, accessToken: string) =>
     request<MultiplayerRoomResponse>('/multiplayer/start', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ code }),
+    }),
+  rematchMultiplayer: (code: string, accessToken: string) =>
+    request<MultiplayerRoomResponse>('/multiplayer/rematch', {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify({ code }),

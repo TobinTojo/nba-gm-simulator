@@ -581,8 +581,20 @@ class ProfileResponse(BaseModel):
     display_name: str = ""
     high_score: int = 0
     friendly_wins: int = 0
+    games_played: int = 0
+    correct_answers: int = 0
+    total_attempts: int = 0
+    points_earned: int = 0
+    accuracy: float = 0.0
+    avg_points: float = 0.0
     rank: int | None = None
     updated_at: str | None = None
+
+
+class CareerGameRequest(BaseModel):
+    score: int = Field(ge=0, le=100000)
+    correct: int = Field(ge=0, le=100000)
+    attempts: int = Field(ge=0, le=100000)
 
 
 class MultiplayerPlayerState(BaseModel):
@@ -592,6 +604,7 @@ class MultiplayerPlayerState(BaseModel):
     is_host: bool = False
     is_you: bool = False
     has_passed: bool = False
+    avatar_url: str | None = None
 
 
 class MultiplayerCreateRequest(BaseModel):
@@ -610,6 +623,10 @@ class MultiplayerSetRoundsRequest(BaseModel):
 
 
 class MultiplayerStartRequest(BaseModel):
+    code: str = Field(min_length=4, max_length=8)
+
+
+class MultiplayerRematchRequest(BaseModel):
     code: str = Field(min_length=4, max_length=8)
 
 

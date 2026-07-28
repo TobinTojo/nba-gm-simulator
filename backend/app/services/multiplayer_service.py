@@ -33,6 +33,7 @@ class RoomPlayer:
     player_id: str
     display_name: str
     score: int = 0
+    avatar_url: str | None = None
 
 
 @dataclass
@@ -260,6 +261,7 @@ def serialize_room(room: MultiplayerRoom, viewer_id: str | None = None) -> dict[
                 "is_host": player.player_id == room.host_id,
                 "is_you": viewer_id == player.player_id,
                 "has_passed": player.player_id in room.round_passes,
+                "avatar_url": player.avatar_url,
             }
             for player in room.players
         ],
@@ -280,6 +282,7 @@ def create_room(
     display_name: str,
     total_rounds: int | None = None,
     era: str | None = None,
+    avatar_url: str | None = None,
 ) -> dict[str, Any]:
     name = display_name.strip()[:40] or "Player 1"
     player_id = player_id.strip()
@@ -293,7 +296,11 @@ def create_room(
     with _lock:
         _cleanup_expired_locked()
         code = _new_code()
-        host = RoomPlayer(player_id=player_id, display_name=name)
+        host = RoomPlayer(
+            player_id=player_id,
+            display_name=name,
+            avatar_url=avatar_url,
+        )
         room = MultiplayerRoom(
             code=code,
             host_id=player_id,
@@ -310,7 +317,12 @@ def create_room(
         return serialize_room(room, player_id)
 
 
-def join_room(code: str, player_id: str, display_name: str) -> dict[str, Any]:
+def join_room(
+    code: str,
+    player_id: str,
+    display_name: str,
+    avatar_url: str | None = None,
+) -> dict[str, Any]:
     name = display_name.strip()[:40] or "Player"
     player_id = player_id.strip()
     room_code = code.strip().upper()
@@ -327,6 +339,9 @@ def join_room(code: str, player_id: str, display_name: str) -> dict[str, Any]:
 
         existing = _find_player(room, player_id)
         if existing:
+            existing.display_name = name
+            if avatar_url:
+                existing.avatar_url = avatar_url
             _sync_room_timers(room)
             room.updated_at = time.time()
             return serialize_room(room, player_id)
@@ -337,7 +352,9 @@ def join_room(code: str, player_id: str, display_name: str) -> dict[str, Any]:
         if len(room.players) >= MAX_PLAYERS:
             raise MultiplayerError("This room is full (max 4 players).")
 
-        room.players.append(RoomPlayer(player_id=player_id, display_name=name))
+        room.players.append(
+            RoomPlayer(player_id=player_id, display_name=name, avatar_url=avatar_url)
+        )
         room.last_message = f"{name} joined ({len(room.players)}/{MAX_PLAYERS})."
         room.updated_at = time.time()
         return serialize_room(room, player_id)
@@ -405,6 +422,39 @@ def start_match(code: str, player_id: str) -> dict[str, Any]:
         room.countdown_started_at = time.time()
         room.friendly_win_recorded = False
         room.last_message = "Get ready..."
+        room.updated_at = time.time()
+        return serialize_room(room, player_id)
+
+
+def rematch(code: str, player_id: str) -> dict[str, Any]:
+    """Host restarts the same lobby after a finished match."""
+    room_code = code.strip().upper()
+    player_id = player_id.strip()
+
+    with _lock:
+        room = _rooms.get(room_code)
+        if room is None:
+            raise MultiplayerError("Room not found.", 404)
+        if player_id != room.host_id:
+            raise MultiplayerError("Only the host can start a rematch.", 403)
+        if room.status != "finished":
+            raise MultiplayerError("Rematch is only available after the match ends.")
+        if len(room.players) < 2:
+            raise MultiplayerError("Need at least 2 players to rematch.")
+
+        room.sequence = _build_sequence(room.total_rounds, room.era)
+        for player in room.players:
+            player.score = 0
+        room.status = "countdown"
+        room.round_index = 0
+        room.used_player_ids = []
+        room.round_passes.clear()
+        room.last_winner_id = None
+        room.last_matched_name = ""
+        room.round_started_at = None
+        room.countdown_started_at = time.time()
+        room.friendly_win_recorded = False
+        room.last_message = "Rematch! Get ready..."
         room.updated_at = time.time()
         return serialize_room(room, player_id)
 

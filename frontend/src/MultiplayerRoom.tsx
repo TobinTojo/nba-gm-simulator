@@ -47,9 +47,10 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
     'Player';
 
   useEffect(() => {
-    if (!room || room.status === 'finished' || !accessToken || correctFlash) return;
+    if (!room || !accessToken || correctFlash) return;
 
-    const intervalMs = room.status === 'countdown' ? 250 : 800;
+    const intervalMs =
+      room.status === 'countdown' ? 250 : room.status === 'finished' ? 1000 : 800;
     const interval = window.setInterval(() => {
       void api
         .getMultiplayerRoom(room.code, accessToken)
@@ -174,6 +175,23 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
     }
   }
 
+  async function handleRematch() {
+    if (!room || !accessToken) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await api.rematchMultiplayer(room.code, accessToken);
+      setRoom(next);
+      setFeedback('');
+      setGuess('');
+      setCorrectFlash(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not start rematch.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handlePass() {
     if (!room || !accessToken || room.status !== 'playing' || busy || room.you_passed) return;
     setBusy(true);
@@ -183,7 +201,7 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
       setRoom(next);
       setFeedback(
         next.pass_count >= next.players.length
-          ? 'Everyone passed — skipping round.'
+          ? 'Everyone passed. Skipping round.'
           : `Passed (${next.pass_count}/${next.players.length})`,
       );
     } catch (err) {
@@ -394,19 +412,32 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
             key={player.player_id}
             className={`rounded-xl border p-3 ${player.is_you ? 'border-accent' : 'border-court-700'}`}
           >
-            <p className="truncate text-xs uppercase tracking-wider text-slate-500">
-              {player.display_name}
-              {player.is_host ? ' · Host' : ''}
-              {player.has_passed ? ' · Passed' : ''}
-            </p>
-            <p className="mt-1 text-2xl font-bold text-white">{player.score}</p>
+            <div className="flex items-center gap-2">
+              {player.avatar_url ? (
+                <img
+                  src={player.avatar_url}
+                  alt=""
+                  className="h-8 w-8 rounded-full border-2 border-accent/70 object-cover"
+                />
+              ) : (
+                <span className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-accent/50 bg-accent/15 text-xs font-semibold text-accent">
+                  {player.display_name.slice(0, 1).toUpperCase()}
+                </span>
+              )}
+              <p className="min-w-0 truncate text-xs uppercase tracking-wider text-slate-500">
+                {player.display_name}
+                {player.is_host ? ' · Host' : ''}
+                {player.has_passed ? ' · Passed' : ''}
+              </p>
+            </div>
+            <p className="mt-2 text-2xl font-bold text-white">{player.score}</p>
           </div>
         ))}
         {room.status === 'waiting' &&
           Array.from({ length: Math.max(0, room.max_players - room.players.length) }).map((_, index) => (
             <div key={`empty-${index}`} className="rounded-xl border border-dashed border-court-700 p-3">
               <p className="text-xs uppercase tracking-wider text-slate-600">Open slot</p>
-              <p className="mt-1 text-2xl font-bold text-slate-700">—</p>
+              <p className="mt-1 text-2xl font-bold text-slate-700">-</p>
             </div>
           ))}
       </div>
@@ -580,7 +611,7 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
             <>
               <p className="text-sm uppercase tracking-[0.35em] text-accent">Champion</p>
               <p className="mt-3 font-display text-5xl font-bold text-white sm:text-6xl">You win!</p>
-              <p className="mt-3 text-lg text-emerald-300">Nice race — that board is yours.</p>
+              <p className="mt-3 text-lg text-emerald-300">Nice race. That board is yours.</p>
             </>
           ) : youTied ? (
             <>
@@ -608,23 +639,50 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
               .map((player, index) => (
                 <p
                   key={player.player_id}
-                  className={`flex items-center justify-between text-sm ${
+                  className={`flex items-center justify-between gap-3 text-sm ${
                     player.is_you ? 'font-semibold text-white' : 'text-slate-300'
                   }`}
                 >
-                  <span>
-                    #{index + 1} {player.display_name}
-                    {player.is_you ? ' (you)' : ''}
+                  <span className="flex min-w-0 items-center gap-2">
+                    {player.avatar_url ? (
+                      <img
+                        src={player.avatar_url}
+                        alt=""
+                        className="h-7 w-7 rounded-full border border-accent/60 object-cover"
+                      />
+                    ) : (
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full border border-accent/40 bg-accent/10 text-[10px] text-accent">
+                        {player.display_name.slice(0, 1).toUpperCase()}
+                      </span>
+                    )}
+                    <span className="truncate">
+                      #{index + 1} {player.display_name}
+                      {player.is_you ? ' (you)' : ''}
+                    </span>
                   </span>
-                  <span className="tabular-nums">{player.score}</span>
+                  <span className="shrink-0 tabular-nums">{player.score}</span>
                 </p>
               ))}
           </div>
 
           <p className="mt-4 text-sm text-slate-400">{room.last_message}</p>
-          <button type="button" onClick={onExit} className="btn-primary mt-8 px-8 py-3">
-            Back to menu
-          </button>
+          <div className="mt-8 flex flex-wrap justify-center gap-3">
+            {room.you_are_host ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void handleRematch()}
+                className="btn-primary px-8 py-3 disabled:opacity-50"
+              >
+                {busy ? 'Starting...' : 'Rematch'}
+              </button>
+            ) : (
+              <p className="w-full text-sm text-slate-500">Waiting for host to rematch...</p>
+            )}
+            <button type="button" onClick={onExit} className="btn-ghost px-8 py-3">
+              Back to menu
+            </button>
+          </div>
         </div>
       )}
 

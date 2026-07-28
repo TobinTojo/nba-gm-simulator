@@ -66,10 +66,14 @@
   .hero-court-lines {
     position: absolute;
     inset: 0;
-    opacity: 0.18;
-    background-image:
-      linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.08) 48%, rgba(255, 255, 255, 0.08) 52%, transparent 100%),
-      radial-gradient(circle at 78% 48%, transparent 14%, rgba(255, 255, 255, 0.12) 14.5%, rgba(255, 255, 255, 0.12) 15%, transparent 15.5%);
+    opacity: 0.12;
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.08) 48%,
+      rgba(255, 255, 255, 0.08) 52%,
+      transparent 100%
+    );
     mask-image: linear-gradient(180deg, transparent, black 20%, black 75%, transparent);
     pointer-events: none;
   }

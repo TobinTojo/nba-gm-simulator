@@ -103,6 +103,20 @@ def display_name_from_claims(claims: dict) -> str:
     return "Player"
 
 
+def avatar_url_from_claims(claims: dict) -> str | None:
+    metadata = claims.get("user_metadata") or {}
+    for key in ("avatar_url", "picture"):
+        value = metadata.get(key)
+        if isinstance(value, str) and value.strip().startswith("http"):
+            return value.strip()[:500]
+
+    picture = claims.get("picture")
+    if isinstance(picture, str) and picture.strip().startswith("http"):
+        return picture.strip()[:500]
+
+    return None
+
+
 def require_auth_user(authorization: str | None) -> dict:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(

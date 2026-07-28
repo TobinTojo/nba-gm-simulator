@@ -4,10 +4,11 @@ import type { ProfileResponse } from '@/types';
 import type { Session, User } from '@supabase/supabase-js';
 
 interface SiteNavProps {
-  mode: 'home' | 'solo' | 'versus';
+  mode: 'home' | 'solo' | 'versus' | 'stats';
   onGoHome: () => void;
   onPlaySolo: () => void;
   onPlayFriends: () => void;
+  onOpenStats: () => void;
   onScrollAbout: () => void;
   enabled: boolean;
   user: User | null;
@@ -23,6 +24,7 @@ export function SiteNav({
   onGoHome,
   onPlaySolo,
   onPlayFriends,
+  onOpenStats,
   onScrollAbout,
   enabled,
   user,
@@ -63,6 +65,12 @@ export function SiteNav({
         display_name: displayName,
         high_score: 0,
         friendly_wins: 0,
+        games_played: 0,
+        correct_answers: 0,
+        total_attempts: 0,
+        points_earned: 0,
+        accuracy: 0,
+        avg_points: 0,
         rank: null,
         updated_at: null,
       });
@@ -117,6 +125,13 @@ export function SiteNav({
           >
             Friends
           </button>
+          <button
+            type="button"
+            onClick={onOpenStats}
+            className={`nav-link ${mode === 'stats' ? 'nav-link-active' : ''}`}
+          >
+            Stats
+          </button>
           {mode === 'home' && (
             <button type="button" onClick={onScrollAbout} className="nav-link">
               About
@@ -160,14 +175,14 @@ export function SiteNav({
                     <div className="rounded-xl bg-court-800/80 px-3 py-3">
                       <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Best</p>
                       <p className="mt-1 font-display text-2xl text-white">
-                        {profileLoading ? '—' : (profile?.high_score ?? 0)}
+                        {profileLoading ? '...' : (profile?.high_score ?? 0)}
                       </p>
                       <p className="text-xs text-slate-500">solo pts</p>
                     </div>
                     <div className="rounded-xl bg-court-800/80 px-3 py-3">
                       <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">1v1</p>
                       <p className="mt-1 font-display text-2xl text-accent">
-                        {profileLoading ? '—' : (profile?.friendly_wins ?? 0)}
+                        {profileLoading ? '...' : (profile?.friendly_wins ?? 0)}
                       </p>
                       <p className="text-xs text-slate-500">friendly wins</p>
                     </div>

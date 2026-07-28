@@ -90,6 +90,12 @@ export interface ProfileResponse {
   display_name: string;
   high_score: number;
   friendly_wins: number;
+  games_played: number;
+  correct_answers: number;
+  total_attempts: number;
+  points_earned: number;
+  accuracy: number;
+  avg_points: number;
   rank: number | null;
   updated_at: string | null;
 }
@@ -101,6 +107,7 @@ export interface MultiplayerPlayerState {
   is_host: boolean;
   is_you: boolean;
   has_passed: boolean;
+  avatar_url?: string | null;
 }
 
 export interface MultiplayerRoomResponse {
