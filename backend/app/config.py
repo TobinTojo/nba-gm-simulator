@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     cors_origin_regex: str = r"https://.*\.netlify\.app"
     leaderboard_database_url: str = ""
     supabase_url: str = ""
+    supabase_service_role_key: str = ""
     supabase_jwt_secret: str = ""
     current_season: str = "2025-26"
     # "all_time" = every NBA player ever; "current" = active rosters only

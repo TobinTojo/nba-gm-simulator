@@ -116,6 +116,7 @@ The app is split across two free hosts:
 | `CORS_ORIGINS_EXTRA` | `https://your-site.netlify.app` (no trailing slash) |
 | `LEADERBOARD_DATABASE_URL` | Supabase Postgres connection string (optional; enables leaderboard) |
 | `SUPABASE_URL` | Supabase project URL, e.g. `https://xyz.supabase.co` (required for sign-in) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase **secret** key (`sb_secret_...`) — used for score writes |
 | `SUPABASE_JWT_SECRET` | Legacy JWT secret (optional; newer projects use asymmetric keys via `SUPABASE_URL`) |
 
 ### Netlify (frontend)
@@ -150,6 +151,7 @@ After changing env vars on either host, trigger a **fresh deploy** (clear cache 
    - Project URL → `VITE_SUPABASE_URL` (Netlify)
    - anon public key → `VITE_SUPABASE_ANON_KEY` (Netlify)
    - Project URL → `SUPABASE_URL` (Render)
+   - Secret key → `SUPABASE_SERVICE_ROLE_KEY` (Render)
    - JWT Secret → `SUPABASE_JWT_SECRET` (Render, optional on newer projects)
 5. Copy from **Connect → Direct → Session pooler → URI** the Postgres connection string → `LEADERBOARD_DATABASE_URL` (Render).
 6. Redeploy Netlify and Render.

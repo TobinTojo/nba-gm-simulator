@@ -2,31 +2,127 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+import logging
+from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 from uuid import UUID
 
+import httpx
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class LeaderboardUnavailable(Exception):
     pass
 
 
+def _rest_configured() -> bool:
+    return bool(settings.supabase_url.strip() and settings.supabase_service_role_key.strip())
+
+
 def leaderboard_enabled() -> bool:
-    return bool(settings.leaderboard_database_url.strip())
+    return bool(settings.leaderboard_database_url.strip()) or _rest_configured()
+
+
+def _normalize_database_url(url: str) -> str:
+    cleaned = url.strip()
+    if not cleaned:
+        return cleaned
+
+    parsed = urlparse(cleaned)
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    if "sslmode" not in query:
+        query["sslmode"] = "require"
+    return urlunparse(parsed._replace(query=urlencode(query)))
 
 
 def _connection():
-    if not leaderboard_enabled():
+    if not settings.leaderboard_database_url.strip():
         raise LeaderboardUnavailable("Leaderboard database is not configured.")
-    return psycopg2.connect(settings.leaderboard_database_url, connect_timeout=10)
+
+    conn = psycopg2.connect(
+        _normalize_database_url(settings.leaderboard_database_url),
+        connect_timeout=10,
+    )
+    conn.prepare_threshold = None
+    return conn
 
 
-def submit_high_score(user_id: str, display_name: str, score: int) -> dict[str, Any]:
+def _rest_headers() -> dict[str, str]:
+    key = settings.supabase_service_role_key.strip()
+    return {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
+
+
+def _rank_for_user(rows: list[dict[str, Any]], user_id: str) -> int | None:
+    sorted_rows = sorted(
+        rows,
+        key=lambda row: (-int(row["high_score"]), str(row.get("updated_at") or "")),
+    )
+    for index, row in enumerate(sorted_rows, start=1):
+        if str(row["user_id"]) == user_id:
+            return index
+    return None
+
+
+def _submit_via_rest(user_id: str, display_name: str, score: int) -> dict[str, Any]:
+    base = settings.supabase_url.strip().rstrip("/")
+    headers = _rest_headers()
+
+    with httpx.Client(timeout=15.0) as client:
+        existing_resp = client.get(
+            f"{base}/rest/v1/leaderboard",
+            params={"user_id": f"eq.{user_id}", "select": "high_score,updated_at"},
+            headers=headers,
+        )
+        existing_resp.raise_for_status()
+        existing_rows = existing_resp.json()
+        previous_high = int(existing_rows[0]["high_score"]) if existing_rows else 0
+        new_high = max(previous_high, score)
+        is_new_best = score > previous_high
+
+        if existing_rows and not is_new_best:
+            updated_at = existing_rows[0]["updated_at"]
+        else:
+            updated_at = datetime.now(timezone.utc).isoformat()
+
+        upsert_resp = client.post(
+            f"{base}/rest/v1/leaderboard",
+            headers={**headers, "Prefer": "resolution=merge-duplicates,return=representation"},
+            params={"on_conflict": "user_id"},
+            json={
+                "user_id": user_id,
+                "display_name": display_name[:80],
+                "high_score": new_high,
+                "updated_at": updated_at,
+            },
+        )
+        upsert_resp.raise_for_status()
+
+        all_resp = client.get(
+            f"{base}/rest/v1/leaderboard",
+            params={"select": "user_id,high_score,updated_at"},
+            headers=headers,
+        )
+        all_resp.raise_for_status()
+        rank = _rank_for_user(all_resp.json(), user_id)
+
+    return {
+        "high_score": new_high,
+        "is_new_best": is_new_best,
+        "rank": rank,
+    }
+
+
+def _submit_via_postgres(user_id: str, display_name: str, score: int) -> dict[str, Any]:
     user_uuid = UUID(str(user_id))
     with _connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -77,36 +173,90 @@ def submit_high_score(user_id: str, display_name: str, score: int) -> dict[str, 
     }
 
 
-def get_leaderboard(limit: int = 25, user_id: str | None = None) -> list[dict[str, Any]]:
-    capped_limit = max(1, min(limit, 100))
-    with _connection() as conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                """
-                SELECT
-                    user_id,
-                    display_name,
-                    high_score,
-                    updated_at,
-                    RANK() OVER (ORDER BY high_score DESC, updated_at ASC) AS rank
-                FROM public.leaderboard
-                ORDER BY high_score DESC, updated_at ASC
-                LIMIT %s
-                """,
-                (capped_limit,),
-            )
-            rows = cur.fetchall()
+def submit_high_score(user_id: str, display_name: str, score: int) -> dict[str, Any]:
+    if _rest_configured():
+        try:
+            return _submit_via_rest(user_id, display_name, score)
+        except Exception:
+            logger.exception("Leaderboard REST submit failed for user %s", user_id)
+            if settings.leaderboard_database_url.strip():
+                return _submit_via_postgres(user_id, display_name, score)
+            raise
+
+    return _submit_via_postgres(user_id, display_name, score)
+
+
+def _get_via_rest(limit: int, user_id: str | None) -> list[dict[str, Any]]:
+    base = settings.supabase_url.strip().rstrip("/")
+    headers = _rest_headers()
+
+    with httpx.Client(timeout=15.0) as client:
+        response = client.get(
+            f"{base}/rest/v1/leaderboard",
+            params={
+                "select": "user_id,display_name,high_score,updated_at",
+                "order": "high_score.desc,updated_at.asc",
+                "limit": str(limit),
+            },
+            headers=headers,
+        )
+        response.raise_for_status()
+        rows = response.json()
 
     entries: list[dict[str, Any]] = []
-    for row in rows:
-        updated_at = row["updated_at"]
+    for index, row in enumerate(rows, start=1):
+        updated_at = row.get("updated_at")
         entries.append(
             {
-                "rank": int(row["rank"]),
+                "rank": index,
                 "display_name": str(row["display_name"]),
                 "high_score": int(row["high_score"]),
-                "updated_at": updated_at.isoformat() if isinstance(updated_at, datetime) else None,
+                "updated_at": updated_at if isinstance(updated_at, str) else None,
                 "is_you": user_id is not None and str(row["user_id"]) == user_id,
             }
         )
     return entries
+
+
+def get_leaderboard(limit: int = 25, user_id: str | None = None) -> list[dict[str, Any]]:
+    capped_limit = max(1, min(limit, 100))
+
+    if settings.leaderboard_database_url.strip():
+        try:
+            with _connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(
+                        """
+                        SELECT
+                            user_id,
+                            display_name,
+                            high_score,
+                            updated_at,
+                            RANK() OVER (ORDER BY high_score DESC, updated_at ASC) AS rank
+                        FROM public.leaderboard
+                        ORDER BY high_score DESC, updated_at ASC
+                        LIMIT %s
+                        """,
+                        (capped_limit,),
+                    )
+                    rows = cur.fetchall()
+
+            entries: list[dict[str, Any]] = []
+            for row in rows:
+                updated_at = row["updated_at"]
+                entries.append(
+                    {
+                        "rank": int(row["rank"]),
+                        "display_name": str(row["display_name"]),
+                        "high_score": int(row["high_score"]),
+                        "updated_at": updated_at.isoformat() if isinstance(updated_at, datetime) else None,
+                        "is_you": user_id is not None and str(row["user_id"]) == user_id,
+                    }
+                )
+            return entries
+        except Exception:
+            logger.exception("Leaderboard postgres read failed")
+            if not _rest_configured():
+                raise
+
+    return _get_via_rest(capped_limit, user_id)

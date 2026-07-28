@@ -138,8 +138,9 @@ export function GamePage() {
         }
         setLeaderboardRefreshKey((value) => value + 1);
       })
-      .catch(() => {
-        setLeaderboardMessage('Could not save score to the leaderboard.');
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : 'Could not save score to the leaderboard.';
+        setLeaderboardMessage(message);
         submittedScoreRef.current = null;
       })
       .finally(() => setSubmittingScore(false));

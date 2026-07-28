@@ -1,7 +1,7 @@
--- Run in Supabase SQL Editor if score submit returns 500.
--- Backend-only access: disable RLS so Render can read/write via Postgres URI.
+-- Run in Supabase SQL Editor if leaderboard submit still fails.
 
 ALTER TABLE public.leaderboard DISABLE ROW LEVEL SECURITY;
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.leaderboard TO postgres;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.leaderboard TO service_role;
+GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.leaderboard TO postgres, service_role;
+GRANT SELECT ON public.leaderboard TO anon, authenticated;
