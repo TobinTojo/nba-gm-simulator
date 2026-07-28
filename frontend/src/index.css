@@ -8,12 +8,63 @@
   }
 
   body {
-    @apply min-h-screen bg-court-950 font-body text-slate-100;
-    background-image:
+    @apply min-h-screen font-body;
+    color: var(--text);
+    background-color: var(--bg);
+    background-image: var(--bg-image);
+    background-attachment: fixed;
+  }
+
+  :root,
+  html[data-theme='dark'] {
+    --bg: #070b10;
+    --text: #e2e8f0;
+    --card: rgba(12, 18, 25, 0.7);
+    --card-border: rgba(255, 255, 255, 0.1);
+    --muted: #94a3b8;
+    --panel: rgba(7, 11, 16, 0.45);
+    --nav: rgba(7, 11, 16, 0.75);
+    --bg-image:
       radial-gradient(ellipse 80% 50% at 50% -20%, rgba(249, 115, 22, 0.12), transparent),
       radial-gradient(ellipse 60% 40% at 100% 0%, rgba(56, 189, 248, 0.05), transparent),
       linear-gradient(180deg, #070b10 0%, #0a1018 40%, #070b10 100%);
-    background-attachment: fixed;
+  }
+
+  html[data-theme='light'] {
+    --bg: #f4efe6;
+    --text: #0f172a;
+    --card: rgba(255, 255, 255, 0.82);
+    --card-border: rgba(15, 23, 42, 0.1);
+    --muted: #64748b;
+    --panel: rgba(255, 255, 255, 0.7);
+    --nav: rgba(244, 239, 230, 0.88);
+    --bg-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(249, 115, 22, 0.14), transparent),
+      radial-gradient(ellipse 50% 40% at 100% 0%, rgba(14, 165, 233, 0.08), transparent),
+      linear-gradient(180deg, #f7f2ea 0%, #efe7da 45%, #f4efe6 100%);
+  }
+
+  html[data-theme='light'] .text-white {
+    color: #0f172a !important;
+  }
+
+  html[data-theme='light'] .text-slate-300,
+  html[data-theme='light'] .text-slate-400,
+  html[data-theme='light'] .text-slate-500 {
+    color: #475569 !important;
+  }
+
+  html[data-theme='light'] .border-white\/5,
+  html[data-theme='light'] .border-white\/10,
+  html[data-theme='light'] .border-white\/15 {
+    border-color: rgba(15, 23, 42, 0.1) !important;
+  }
+
+  html[data-theme='light'] .bg-white\/5,
+  html[data-theme='light'] .bg-white\/10,
+  html[data-theme='light'] .hover\:bg-white\/5:hover,
+  html[data-theme='light'] .hover\:bg-white\/10:hover {
+    background-color: rgba(15, 23, 42, 0.05) !important;
   }
 
   ::selection {
@@ -23,7 +74,11 @@
 
 @layer components {
   .card {
-    @apply rounded-2xl border border-white/10 bg-court-900/70 shadow-xl shadow-black/20 backdrop-blur-md;
+    border-radius: 1rem;
+    border: 1px solid var(--card-border);
+    background: var(--card);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12);
+    backdrop-filter: blur(12px);
   }
 
   .btn-primary {
@@ -35,15 +90,35 @@
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center rounded-xl border border-white/15 bg-transparent px-5 py-2.5 font-semibold text-white transition duration-200 hover:border-accent/60 hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-accent/30 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center rounded-xl border border-white/15 bg-transparent px-5 py-2.5 font-semibold transition duration-200 hover:border-accent/60 hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-accent/30 disabled:cursor-not-allowed disabled:opacity-50;
+    color: var(--text);
   }
 
   .nav-link {
-    @apply rounded-full px-4 py-2 text-sm font-medium text-slate-400 transition hover:bg-white/5 hover:text-white;
+    @apply rounded-full px-4 py-2 text-sm font-medium transition;
+    color: var(--muted);
+  }
+
+  .nav-link:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text);
+  }
+
+  html[data-theme='light'] .nav-link:hover {
+    background: rgba(15, 23, 42, 0.06);
   }
 
   .nav-link-active {
-    @apply bg-white/10 text-white;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text);
+  }
+
+  html[data-theme='light'] .nav-link-active {
+    background: rgba(15, 23, 42, 0.08);
+  }
+
+  .site-nav {
+    background: var(--nav);
   }
 
   .stat-label {
@@ -88,8 +163,13 @@
     filter: drop-shadow(0 14px 12px rgba(0, 0, 0, 0.4));
   }
 
-  .correct-flash {
+  .correct-flash,
+  .wrong-flash {
     animation: correctPop 0.45s ease-out both;
+  }
+
+  .timer-urgent {
+    animation: timerPulse 0.7s ease-in-out infinite;
   }
 }
 
@@ -124,5 +204,17 @@
   100% {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+@keyframes timerPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.85;
   }
 }

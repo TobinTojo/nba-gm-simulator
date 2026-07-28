@@ -3,17 +3,22 @@ import { api } from '@/api/client';
 import { AboutSection } from '@/components/AboutSection';
 import { CareerStatsPage } from '@/components/CareerStatsPage';
 import { LandingHero } from '@/components/LandingHero';
+import { LeaveGameModal } from '@/components/LeaveGameModal';
 import { SiteNav } from '@/components/SiteNav';
+import { useSettings } from '@/context/SettingsContext';
 import { useLeaderboardAuth } from '@/hooks/useLeaderboardAuth';
+import { playSfx } from '@/lib/sounds';
 import { LeaderboardPanel } from '@/LeaderboardPanel';
 import { MultiplayerRoom } from '@/MultiplayerRoom';
 import type { GamePhase, InitialsRevealEntry, SessionRound } from '@/types';
 
 const DEFAULT_TIMER_SECONDS = 30;
+const LOW_TIME_SECONDS = 5;
 
 type AppMode = 'home' | 'solo' | 'versus' | 'stats';
 
 export function GamePage() {
+  const { soundEnabled } = useSettings();
   const {
     enabled: leaderboardEnabled,
     user,
@@ -48,6 +53,9 @@ export function GamePage() {
   const [profileRefreshKey, setProfileRefreshKey] = useState(0);
   const [submittingScore, setSubmittingScore] = useState(false);
   const [correctFlash, setCorrectFlash] = useState<{ name: string; points: number } | null>(null);
+  const [wrongFlash, setWrongFlash] = useState<string | null>(null);
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const pendingLeaveAction = useRef<(() => void) | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const phaseRef = useRef<GamePhase>('idle');
@@ -122,6 +130,8 @@ export function GamePage() {
       setPhase('gameover');
       setMessage(reason);
       setLeaderboardMessage('');
+      setCorrectFlash(null);
+      setWrongFlash(null);
       submittedScoreRef.current = null;
       await loadReveals(allRounds);
     },
@@ -196,6 +206,7 @@ export function GamePage() {
   }, [phase, score, session, submitScore, leaderboardEnabled]);
 
   const endGameOnTimeout = useCallback(() => {
+    playSfx('wrong', soundEnabled);
     const spent = timerSecondsRef.current;
     void finishGame(
       "Time's up!",
@@ -209,10 +220,17 @@ export function GamePage() {
       },
       sessionRoundsRef.current,
     );
-  }, [finishGame]);
+  }, [finishGame, soundEnabled]);
 
   useEffect(() => {
-    if (phase !== 'playing' || correctFlash) return;
+    if (phase !== 'playing' || correctFlash || wrongFlash) return;
+    if (timeLeft > 0 && timeLeft <= LOW_TIME_SECONDS) {
+      playSfx('tick', soundEnabled);
+    }
+  }, [timeLeft, phase, correctFlash, wrongFlash, soundEnabled]);
+
+  useEffect(() => {
+    if (phase !== 'playing' || correctFlash || wrongFlash) return;
 
     const interval = window.setInterval(() => {
       setTimeLeft((prev) => {
@@ -228,7 +246,7 @@ export function GamePage() {
     }, 1000);
 
     return () => window.clearInterval(interval);
-  }, [phase, endGameOnTimeout, timerGeneration, correctFlash]);
+  }, [phase, endGameOnTimeout, timerGeneration, correctFlash, wrongFlash]);
 
   useEffect(() => {
     if (phase === 'playing') {
@@ -256,10 +274,12 @@ export function GamePage() {
       setMessage('');
       setLeaderboardMessage('');
       setCorrectFlash(null);
+      setWrongFlash(null);
       submittedScoreRef.current = null;
       setTimerGeneration((n) => n + 1);
       setMode('solo');
       setPhase('playing');
+      playSfx('start', soundEnabled);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start game');
     } finally {
@@ -269,7 +289,7 @@ export function GamePage() {
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (phase !== 'playing' || submitting || !guess.trim() || correctFlash) return;
+    if (phase !== 'playing' || submitting || !guess.trim() || correctFlash || wrongFlash) return;
 
     setSubmitting(true);
     setError(null);
@@ -279,8 +299,14 @@ export function GamePage() {
       const result = await api.submitGuess(initials, guess.trim(), usedPlayerIds, submittedTimeLeft);
 
       if (!result.correct || result.game_over) {
+        playSfx('wrong', soundEnabled);
+        const reason = result.reason || 'Wrong answer. Game over.';
+        setWrongFlash(reason);
+        setGuess('');
+        setSubmitting(false);
+        await new Promise((resolve) => window.setTimeout(resolve, 1200));
         await finishGame(
-          result.reason || 'Wrong answer. Game over.',
+          reason,
           {
             initials,
             guess: guess.trim(),
@@ -303,6 +329,7 @@ export function GamePage() {
         success: true,
       };
 
+      playSfx('correct', soundEnabled);
       setScore((prev) => prev + result.points);
       setStreak((prev) => prev + 1);
       setUsedPlayerIds((prev) => [...prev, result.matched_nba_id]);
@@ -320,6 +347,7 @@ export function GamePage() {
       setTimerGeneration((n) => n + 1);
       setCorrectFlash(null);
     } catch (err) {
+      playSfx('wrong', soundEnabled);
       await finishGame(
         err instanceof Error ? err.message : 'Something went wrong.',
         {
@@ -348,8 +376,71 @@ export function GamePage() {
     document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' });
   }
 
+  const inActiveSoloRun = mode === 'solo' && phase === 'playing' && streak >= 1;
+
+  function requestNavigation(action: () => void) {
+    if (!inActiveSoloRun) {
+      action();
+      return;
+    }
+    pendingLeaveAction.current = action;
+    setLeaveOpen(true);
+  }
+
+  async function confirmLeaveAndSave() {
+    setLeaveOpen(false);
+    const action = pendingLeaveAction.current;
+    pendingLeaveAction.current = null;
+    const spent = timerSeconds - timeLeftRef.current;
+    const finalRound: SessionRound = {
+      initials: initialsRef.current,
+      guess: guessRef.current.trim(),
+      matched_name: '-',
+      points: 0,
+      time_spent: spent,
+      success: false,
+    };
+    const allRounds = [...sessionRoundsRef.current, finalRound];
+    setSessionRounds(allRounds);
+    sessionRoundsRef.current = allRounds;
+
+    if (leaderboardEnabled && session?.access_token) {
+      const correct = allRounds.filter((round) => round.success).length;
+      const attempts = Math.max(allRounds.length, 1);
+      try {
+        await api.recordCareerGame(score, correct, attempts, session.access_token);
+        setLeaderboardRefreshKey((value) => value + 1);
+        setProfileRefreshKey((value) => value + 1);
+        submittedScoreRef.current = score > 0 ? score : -1;
+      } catch {
+        if (score > 0) {
+          try {
+            await submitScore(score, session.access_token);
+          } catch {
+            /* best effort */
+          }
+        }
+      }
+    }
+
+    setPhase('idle');
+    setMode('home');
+    setMessage('Left early. Score saved.');
+    action?.();
+  }
+
+  useEffect(() => {
+    if (!inActiveSoloRun) return;
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [inActiveSoloRun]);
+
   const timerPct = (timeLeft / timerSeconds) * 100;
-  const lowTimeThreshold = Math.max(3, Math.floor(timerSeconds / 6));
+  const isLowTime = timeLeft <= LOW_TIME_SECONDS;
   const initialsCountLabel =
     initialsPlayerCount === 1 ? '1 player has these initials' : `${initialsPlayerCount} players have these initials`;
 
@@ -359,16 +450,24 @@ export function GamePage() {
     <div className="flex min-h-screen flex-col">
       <SiteNav
         mode={mode}
-        onGoHome={goHome}
-        onPlaySolo={() => void handleStart()}
-        onPlayFriends={() => {
-          setMode('versus');
-          setPhase('idle');
-        }}
-        onOpenStats={() => {
-          setMode('stats');
-          setPhase('idle');
-        }}
+        onGoHome={() => requestNavigation(goHome)}
+        onPlaySolo={() =>
+          requestNavigation(() => {
+            void handleStart();
+          })
+        }
+        onPlayFriends={() =>
+          requestNavigation(() => {
+            setMode('versus');
+            setPhase('idle');
+          })
+        }
+        onOpenStats={() =>
+          requestNavigation(() => {
+            setMode('stats');
+            setPhase('idle');
+          })
+        }
         onScrollAbout={scrollAbout}
         enabled={leaderboardEnabled}
         user={user}
@@ -377,6 +476,16 @@ export function GamePage() {
         signInWithGoogle={signInWithGoogle}
         signOut={signOut}
         profileRefreshKey={profileRefreshKey}
+      />
+
+      <LeaveGameModal
+        open={leaveOpen}
+        score={score}
+        onStay={() => {
+          setLeaveOpen(false);
+          pendingLeaveAction.current = null;
+        }}
+        onLeave={() => void confirmLeaveAndSave()}
       />
 
       {mode === 'stats' ? (
@@ -427,7 +536,7 @@ export function GamePage() {
           <section className="card flex flex-1 flex-col p-6 sm:p-8 animate-slide-up">
             {mode === 'versus' ? (
               <MultiplayerRoom
-                onExit={goHome}
+                onExit={() => requestNavigation(goHome)}
                 onMatchFinished={() => setProfileRefreshKey((value) => value + 1)}
               />
             ) : loading && phase === 'idle' ? (
@@ -449,7 +558,7 @@ export function GamePage() {
                         <p className="text-xs uppercase tracking-wider text-slate-500">Time</p>
                         <p
                           className={`font-display text-4xl ${
-                            timeLeft <= lowTimeThreshold ? 'text-red-400' : 'text-white'
+                            isLowTime ? 'timer-urgent text-red-400' : 'text-white'
                           }`}
                         >
                           {timeLeft}s
@@ -460,7 +569,7 @@ export function GamePage() {
                     <div className="mb-8 h-2 overflow-hidden rounded-full bg-court-800">
                       <div
                         className={`h-full transition-all duration-1000 ease-linear ${
-                          timeLeft <= lowTimeThreshold ? 'bg-red-500' : 'bg-accent'
+                          isLowTime ? 'bg-red-500' : 'bg-accent'
                         }`}
                         style={{ width: `${timerPct}%` }}
                       />
@@ -483,6 +592,13 @@ export function GamePage() {
                             {correctFlash.name}
                           </p>
                         </div>
+                      ) : wrongFlash ? (
+                        <div className="wrong-flash mx-auto mt-5 max-w-md rounded-2xl border border-red-400/50 bg-red-500/15 px-4 py-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-red-300">
+                            Wrong
+                          </p>
+                          <p className="mt-2 text-lg font-semibold text-white">{wrongFlash}</p>
+                        </div>
                       ) : (
                         message && <p className="mt-3 text-sm text-emerald-400">{message}</p>
                       )}
@@ -498,14 +614,16 @@ export function GamePage() {
                         type="text"
                         value={guess}
                         onChange={(e) => setGuess(e.target.value)}
-                        disabled={submitting || Boolean(correctFlash)}
+                        disabled={submitting || Boolean(correctFlash) || Boolean(wrongFlash)}
                         autoComplete="off"
                         placeholder="Type full name (e.g. Michael Jordan)"
                         className="w-full rounded-xl border border-white/10 bg-court-950/80 px-4 py-4 text-lg text-white placeholder:text-slate-600 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30 disabled:opacity-50"
                       />
                       <button
                         type="submit"
-                        disabled={submitting || !guess.trim() || Boolean(correctFlash)}
+                        disabled={
+                          submitting || !guess.trim() || Boolean(correctFlash) || Boolean(wrongFlash)
+                        }
                         className="btn-primary mt-4 w-full py-3 text-lg disabled:opacity-50"
                       >
                         {submitting ? 'Checking...' : 'Submit'}

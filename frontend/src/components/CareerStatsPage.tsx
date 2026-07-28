@@ -49,6 +49,11 @@ export function CareerStatsPage({
     user?.email?.split('@')[0] ||
     'Player';
 
+  const avatarUrl =
+    (typeof user?.user_metadata?.avatar_url === 'string' && user.user_metadata.avatar_url) ||
+    (typeof user?.user_metadata?.picture === 'string' && user.user_metadata.picture) ||
+    null;
+
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 py-10 sm:px-6">
       <div className="animate-slide-up">
@@ -77,15 +82,31 @@ export function CareerStatsPage({
           <p className="text-red-300">{error}</p>
         ) : (
           <>
-            <p className="text-sm text-slate-400">
-              Playing as <span className="text-white">{displayName}</span>
-              {profile?.rank != null ? (
-                <>
-                  {' '}
-                  · Rank <span className="text-accent">#{profile.rank}</span>
-                </>
-              ) : null}
-            </p>
+            <div className="flex items-center gap-4">
+              {avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt=""
+                  className="h-16 w-16 rounded-full border-2 border-accent object-cover"
+                />
+              ) : (
+                <span className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-accent/60 bg-accent/15 font-display text-3xl text-accent">
+                  {displayName.slice(0, 1).toUpperCase()}
+                </span>
+              )}
+              <div>
+                <p className="text-lg font-semibold text-white">{displayName}</p>
+                <p className="text-sm text-slate-400">
+                  {profile?.rank != null ? (
+                    <>
+                      Rank <span className="text-accent">#{profile.rank}</span>
+                    </>
+                  ) : (
+                    'Unranked'
+                  )}
+                </p>
+              </div>
+            </div>
 
             <div className="mt-8 grid gap-4 sm:grid-cols-2">
               <StatCard label="Games played" value={String(profile?.games_played ?? 0)} />

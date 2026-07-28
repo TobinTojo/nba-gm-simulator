@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '@/api/client';
+import { useSettings } from '@/context/SettingsContext';
 import { useLeaderboardAuth } from '@/hooks/useLeaderboardAuth';
+import { playSfx } from '@/lib/sounds';
 import { WinnerConfetti } from '@/WinnerConfetti';
 import type { MultiplayerRoomResponse } from '@/types';
 
@@ -22,6 +24,7 @@ interface MultiplayerRoomProps {
 }
 
 export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProps) {
+  const { soundEnabled } = useSettings();
   const { enabled, user, session, authLoading, signInWithGoogle, signOut } = useLeaderboardAuth();
   const [joinCode, setJoinCode] = useState('');
   const [selectedRounds, setSelectedRounds] = useState<(typeof ROUND_OPTIONS)[number]>(9);
@@ -35,7 +38,10 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
   const [displayTime, setDisplayTime] = useState(30);
   const [displayCountdown, setDisplayCountdown] = useState(3);
   const [correctFlash, setCorrectFlash] = useState<string | null>(null);
+  const [wrongFlash, setWrongFlash] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const lastCountdownRef = useRef<number | null>(null);
+  const startedSoundRef = useRef(false);
 
   const accessToken = session?.access_token;
   const playerId = user?.id ?? '';
@@ -75,6 +81,36 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
       finishedNotifiedRef.current = false;
     }
   }, [room?.status, onMatchFinished]);
+
+  useEffect(() => {
+    if (room?.status !== 'countdown') {
+      lastCountdownRef.current = null;
+      return;
+    }
+    if (lastCountdownRef.current !== displayCountdown && displayCountdown > 0) {
+      playSfx('countdown', soundEnabled);
+      lastCountdownRef.current = displayCountdown;
+    }
+    if (displayCountdown === 0) {
+      playSfx('start', soundEnabled);
+    }
+  }, [room?.status, displayCountdown, soundEnabled]);
+
+  useEffect(() => {
+    if (room?.status === 'playing' && !startedSoundRef.current) {
+      startedSoundRef.current = true;
+      playSfx('start', soundEnabled);
+    }
+    if (room?.status !== 'playing') {
+      startedSoundRef.current = false;
+    }
+  }, [room?.status, soundEnabled]);
+
+  useEffect(() => {
+    if (room?.status === 'playing' && displayTime > 0 && displayTime <= 5) {
+      playSfx('tick', soundEnabled);
+    }
+  }, [displayTime, room?.status, soundEnabled]);
 
   useEffect(() => {
     if (room?.status === 'playing') {
@@ -213,7 +249,15 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
 
   async function handleGuess(event: React.FormEvent) {
     event.preventDefault();
-    if (!room || !accessToken || room.status !== 'playing' || busy || !guess.trim() || correctFlash) {
+    if (
+      !room ||
+      !accessToken ||
+      room.status !== 'playing' ||
+      busy ||
+      !guess.trim() ||
+      correctFlash ||
+      wrongFlash
+    ) {
       return;
     }
 
@@ -223,6 +267,7 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
       const next = await api.submitMultiplayerGuess(room.code, guess.trim(), accessToken);
       setFeedback(next.your_feedback || '');
       if (next.accepted) {
+        playSfx('correct', soundEnabled);
         setGuess('');
         setCorrectFlash(next.last_matched_name || 'Correct!');
         setBusy(false);
@@ -230,6 +275,11 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
         setRoom(next);
         setCorrectFlash(null);
       } else {
+        playSfx('wrong', soundEnabled);
+        setWrongFlash(next.your_feedback || 'Incorrect. Keep trying!');
+        setBusy(false);
+        await new Promise((resolve) => window.setTimeout(resolve, 900));
+        setWrongFlash(null);
         setRoom(next);
       }
     } catch (err) {
@@ -527,7 +577,7 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
             </p>
             <p
               className={`text-2xl font-bold tabular-nums ${
-                displayTime <= 5 ? 'text-red-400' : 'text-white'
+                displayTime <= 5 ? 'timer-urgent text-red-400' : 'text-white'
               }`}
             >
               {displayTime}s
@@ -561,6 +611,11 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
                 <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-300">Correct</p>
                 <p className="mt-2 text-xl font-semibold text-white sm:text-2xl">{correctFlash}</p>
               </div>
+            ) : wrongFlash ? (
+              <div className="wrong-flash mx-auto mt-5 max-w-md rounded-2xl border border-red-400/50 bg-red-500/15 px-4 py-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-red-300">Wrong</p>
+                <p className="mt-2 text-lg font-semibold text-white">{wrongFlash}</p>
+              </div>
             ) : (
               <>
                 <p className="mt-3 text-sm text-emerald-400">{room.last_message}</p>
@@ -579,7 +634,7 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
               type="text"
               value={guess}
               onChange={(e) => setGuess(e.target.value)}
-              disabled={busy || room.you_passed || Boolean(correctFlash)}
+              disabled={busy || room.you_passed || Boolean(correctFlash) || Boolean(wrongFlash)}
               autoComplete="off"
               placeholder="Type full name"
               className="w-full rounded-xl border border-court-600 bg-court-900 px-4 py-4 text-lg text-white placeholder:text-slate-600 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30 disabled:opacity-50"
@@ -587,7 +642,7 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
             <div className="mt-4 grid grid-cols-2 gap-3">
               <button
                 type="button"
-                disabled={busy || room.you_passed || Boolean(correctFlash)}
+                disabled={busy || room.you_passed || Boolean(correctFlash) || Boolean(wrongFlash)}
                 onClick={() => void handlePass()}
                 className="rounded-xl border border-court-500 py-3 text-lg font-medium text-white hover:border-accent disabled:opacity-50"
               >
@@ -595,7 +650,13 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
               </button>
               <button
                 type="submit"
-                disabled={busy || room.you_passed || !guess.trim() || Boolean(correctFlash)}
+                disabled={
+                  busy ||
+                  room.you_passed ||
+                  !guess.trim() ||
+                  Boolean(correctFlash) ||
+                  Boolean(wrongFlash)
+                }
                 className="btn-primary py-3 text-lg disabled:opacity-50"
               >
                 {busy ? 'Checking...' : 'Submit'}

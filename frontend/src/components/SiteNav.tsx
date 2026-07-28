@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/api/client';
 import type { ProfileResponse } from '@/types';
 import type { Session, User } from '@supabase/supabase-js';
+import { SettingsMenu } from '@/components/SettingsMenu';
 
 interface SiteNavProps {
   mode: 'home' | 'solo' | 'versus' | 'stats';
@@ -35,6 +36,7 @@ export function SiteNav({
   profileRefreshKey = 0,
 }: SiteNavProps) {
   const [open, setOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -94,7 +96,7 @@ export function SiteNav({
   }, []);
 
   return (
-    <header className="site-nav sticky top-0 z-40 border-b border-white/5 bg-court-950/75 backdrop-blur-xl">
+    <header className="site-nav sticky top-0 z-40 border-b border-white/5 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
         <button type="button" onClick={onGoHome} className="group flex items-center gap-3 text-left">
           <span className="relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-accent shadow-[0_0_24px_rgba(249,115,22,0.35)]">
@@ -140,8 +142,15 @@ export function SiteNav({
         </nav>
 
         <div className="relative flex items-center gap-2" ref={menuRef}>
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:border-accent/40 hover:text-white"
+          >
+            Settings
+          </button>
           {!enabled ? null : authLoading ? (
-            <span className="text-xs text-slate-500">…</span>
+            <span className="text-xs text-slate-500">...</span>
           ) : user ? (
             <>
               <button
@@ -218,6 +227,7 @@ export function SiteNav({
           )}
         </div>
       </div>
+      <SettingsMenu open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </header>
   );
 }
