@@ -103,9 +103,11 @@ export interface MultiplayerRoomResponse {
   era: string;
   era_label: string;
   round_seconds: number;
+  countdown_seconds: number;
   round_index: number;
   round_number: number;
   time_left: number | null;
+  countdown_left: number | null;
   current_initials: string;
   initials_player_count: number;
   players: MultiplayerPlayerState[];

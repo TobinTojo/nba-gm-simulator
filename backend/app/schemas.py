@@ -622,9 +622,11 @@ class MultiplayerRoomResponse(BaseModel):
     era: str = "all_time"
     era_label: str = "All-time"
     round_seconds: int = 30
+    countdown_seconds: int = 3
     round_index: int = 0
     round_number: int = 1
     time_left: int | None = None
+    countdown_left: int | None = None
     current_initials: str = ""
     initials_player_count: int = 0
     players: list[MultiplayerPlayerState] = Field(default_factory=list)

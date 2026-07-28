@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '@/api/client';
 import { useLeaderboardAuth } from '@/hooks/useLeaderboardAuth';
+import { WinnerConfetti } from '@/WinnerConfetti';
 import type { MultiplayerRoomResponse } from '@/types';
 
 const ROUND_OPTIONS = [9, 12, 15] as const;
@@ -31,6 +32,7 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [displayTime, setDisplayTime] = useState(30);
+  const [displayCountdown, setDisplayCountdown] = useState(3);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const accessToken = session?.access_token;
@@ -45,6 +47,7 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
   useEffect(() => {
     if (!room || room.status === 'finished' || !accessToken) return;
 
+    const intervalMs = room.status === 'countdown' ? 250 : 800;
     const interval = window.setInterval(() => {
       void api
         .getMultiplayerRoom(room.code, accessToken)
@@ -52,7 +55,7 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
         .catch(() => {
           /* keep last known room state while polling */
         });
-    }, 800);
+    }, intervalMs);
 
     return () => window.clearInterval(interval);
   }, [room?.code, room?.status, accessToken]);
@@ -77,6 +80,21 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
     }, 200);
     return () => window.clearInterval(interval);
   }, [room?.status, room?.time_left, room?.round_index, room?.round_seconds]);
+
+  useEffect(() => {
+    if (room?.status !== 'countdown' || room.countdown_left == null) {
+      setDisplayCountdown(room?.countdown_seconds ?? 3);
+      return;
+    }
+    const base = room.countdown_left;
+    const startedAt = Date.now();
+    setDisplayCountdown(base);
+    const interval = window.setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+      setDisplayCountdown(Math.max(0, base - elapsed));
+    }, 100);
+    return () => window.clearInterval(interval);
+  }, [room?.status, room?.countdown_left, room?.countdown_seconds]);
 
   async function handleCreate() {
     if (!accessToken) return;
@@ -318,13 +336,15 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
     );
   }
 
-  const youWon = room.winner_ids.includes(playerId);
+  const youWon = room.winner_ids.includes(playerId) && room.winner_ids.length === 1;
   const isDraw = room.status === 'finished' && room.winner_ids.length > 1;
+  const youTied = room.status === 'finished' && isDraw && room.winner_ids.includes(playerId);
   const scoreGridClass =
     room.players.length <= 2 ? 'grid-cols-2' : room.players.length === 3 ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-4';
 
   return (
     <div className="flex flex-1 flex-col">
+      <WinnerConfetti active={room.status === 'finished' && youWon} />
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <p className="text-xs uppercase tracking-wider text-slate-500">Room</p>
@@ -428,6 +448,23 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
         </div>
       )}
 
+      {room.status === 'countdown' && (
+        <div className="flex flex-1 flex-col items-center justify-center text-center">
+          <p className="text-sm uppercase tracking-[0.3em] text-accent">Get Ready</p>
+          <p
+            key={displayCountdown}
+            className="mt-4 font-display text-8xl font-bold text-white transition-transform duration-200 sm:text-9xl"
+            style={{ transform: 'scale(1.05)' }}
+          >
+            {displayCountdown > 0 ? displayCountdown : 'GO'}
+          </p>
+          <p className="mt-4 text-slate-400">
+            {room.era_label} · {room.total_rounds} rounds
+          </p>
+          <p className="mt-2 text-sm text-slate-500">Match starts in a moment...</p>
+        </div>
+      )}
+
       {room.status === 'playing' && (
         <>
           <div className="mb-4 flex items-center justify-between gap-4">
@@ -507,20 +544,52 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
 
       {room.status === 'finished' && (
         <div className="flex flex-1 flex-col items-center justify-center text-center">
-          <p className="text-sm uppercase tracking-wider text-accent">Match Over</p>
-          <p className="mt-2 text-3xl font-bold text-white">
-            {isDraw ? "It's a draw!" : youWon ? 'You win!' : 'You lose'}
-          </p>
-          <div className="mt-4 space-y-1 text-sm text-slate-300">
+          {youWon ? (
+            <>
+              <p className="text-sm uppercase tracking-[0.35em] text-accent">Champion</p>
+              <p className="mt-3 font-display text-5xl font-bold text-white sm:text-6xl">You win!</p>
+              <p className="mt-3 text-lg text-emerald-300">Nice race — that board is yours.</p>
+            </>
+          ) : youTied ? (
+            <>
+              <p className="text-sm uppercase tracking-wider text-accent">Draw</p>
+              <p className="mt-2 text-4xl font-bold text-white">You tied!</p>
+              <p className="mt-2 text-slate-400">Split the crown this time.</p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm uppercase tracking-wider text-slate-500">Match Over</p>
+              <p className="mt-2 text-4xl font-bold text-white">You lose</p>
+              <p className="mt-2 text-slate-400">Rematch and take it back.</p>
+            </>
+          )}
+
+          <div
+            className={`mt-8 w-full max-w-sm space-y-2 rounded-2xl border p-5 ${
+              youWon
+                ? 'border-accent/50 bg-accent/10'
+                : 'border-court-700 bg-court-900/50'
+            }`}
+          >
             {[...room.players]
               .sort((a, b) => b.score - a.score)
-              .map((player) => (
-                <p key={player.player_id}>
-                  {player.display_name}: {player.score}
+              .map((player, index) => (
+                <p
+                  key={player.player_id}
+                  className={`flex items-center justify-between text-sm ${
+                    player.is_you ? 'font-semibold text-white' : 'text-slate-300'
+                  }`}
+                >
+                  <span>
+                    #{index + 1} {player.display_name}
+                    {player.is_you ? ' (you)' : ''}
+                  </span>
+                  <span className="tabular-nums">{player.score}</span>
                 </p>
               ))}
           </div>
-          <p className="mt-3 text-sm text-slate-400">{room.last_message}</p>
+
+          <p className="mt-4 text-sm text-slate-400">{room.last_message}</p>
           <button type="button" onClick={onExit} className="btn-primary mt-8 px-8 py-3">
             Back to menu
           </button>

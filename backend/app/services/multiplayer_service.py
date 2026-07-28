@@ -22,6 +22,7 @@ DEFAULT_ROUNDS = 9
 ALLOWED_ROUNDS = frozenset({9, 12, 15})
 MAX_PLAYERS = 4
 ROUND_SECONDS = 30
+COUNTDOWN_SECONDS = 3
 ROOM_TTL_SECONDS = 60 * 60
 CODE_ALPHABET = string.ascii_uppercase + string.digits
 DEFAULT_ERA = "all_time"
@@ -50,6 +51,7 @@ class MultiplayerRoom:
     last_winner_id: str | None = None
     last_matched_name: str = ""
     round_started_at: float | None = None
+    countdown_started_at: float | None = None
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
 
@@ -137,6 +139,34 @@ def _advance_round(room: MultiplayerRoom, message: str) -> None:
         room.last_message = message
 
 
+def _countdown_left(room: MultiplayerRoom) -> int | None:
+    if room.status != "countdown" or room.countdown_started_at is None:
+        return None
+    elapsed = time.time() - room.countdown_started_at
+    return max(0, int(COUNTDOWN_SECONDS - elapsed + 0.999))
+
+
+def _maybe_begin_playing(room: MultiplayerRoom) -> bool:
+    """Move from countdown into playing when the 3s ready timer ends."""
+    if room.status != "countdown" or room.countdown_started_at is None:
+        return False
+    if time.time() - room.countdown_started_at < COUNTDOWN_SECONDS:
+        return False
+
+    room.status = "playing"
+    room.countdown_started_at = None
+    room.round_started_at = time.time()
+    room.round_passes.clear()
+    room.last_message = f"Round 1 of {room.total_rounds} ({era_label(room.era)}) — go!"
+    room.updated_at = time.time()
+    return True
+
+
+def _sync_room_timers(room: MultiplayerRoom) -> None:
+    _maybe_begin_playing(room)
+    _maybe_expire_round(room)
+
+
 def _time_left(room: MultiplayerRoom) -> int | None:
     if room.status != "playing" or room.round_started_at is None:
         return None
@@ -187,9 +217,11 @@ def serialize_room(room: MultiplayerRoom, viewer_id: str | None = None) -> dict[
         "era": room.era,
         "era_label": era_label(room.era),
         "round_seconds": ROUND_SECONDS,
+        "countdown_seconds": COUNTDOWN_SECONDS,
         "round_index": room.round_index,
         "round_number": min(room.round_index + 1, room.total_rounds),
         "time_left": _time_left(room),
+        "countdown_left": _countdown_left(room),
         "current_initials": initials,
         "initials_player_count": count_players_for_initials_era(
             initials,
@@ -273,7 +305,7 @@ def join_room(code: str, player_id: str, display_name: str) -> dict[str, Any]:
 
         existing = _find_player(room, player_id)
         if existing:
-            _maybe_expire_round(room)
+            _sync_room_timers(room)
             room.updated_at = time.time()
             return serialize_room(room, player_id)
 
@@ -341,16 +373,15 @@ def start_match(code: str, player_id: str) -> dict[str, Any]:
 
         for player in room.players:
             player.score = 0
-        room.status = "playing"
+        room.status = "countdown"
         room.round_index = 0
         room.used_player_ids = []
         room.round_passes.clear()
         room.last_winner_id = None
         room.last_matched_name = ""
-        room.round_started_at = time.time()
-        room.last_message = (
-            f"Match started — Round 1 of {room.total_rounds} ({era_label(room.era)})!"
-        )
+        room.round_started_at = None
+        room.countdown_started_at = time.time()
+        room.last_message = "Get ready..."
         room.updated_at = time.time()
         return serialize_room(room, player_id)
 
@@ -362,7 +393,7 @@ def get_room(code: str, viewer_id: str | None = None) -> dict[str, Any]:
         room = _rooms.get(room_code)
         if room is None:
             raise MultiplayerError("Room not found.", 404)
-        _maybe_expire_round(room)
+        _sync_room_timers(room)
         room.updated_at = time.time()
         return serialize_room(room, viewer_id)
 
@@ -378,7 +409,7 @@ def submit_pass(code: str, player_id: str) -> dict[str, Any]:
         if room is None:
             raise MultiplayerError("Room not found.", 404)
 
-        _maybe_expire_round(room)
+        _sync_room_timers(room)
 
         if room.status != "playing":
             raise MultiplayerError("Match is not in progress.")
@@ -424,7 +455,7 @@ def submit_guess(code: str, player_id: str, guess: str) -> dict[str, Any]:
         if room is None:
             raise MultiplayerError("Room not found.", 404)
 
-        _maybe_expire_round(room)
+        _sync_room_timers(room)
 
         if room.status != "playing":
             raise MultiplayerError("Match is not in progress.")
