@@ -85,3 +85,28 @@ export interface SubmitScoreResponse {
   is_new_best: boolean;
   rank: number | null;
 }
+
+export interface MultiplayerPlayerState {
+  player_id: string;
+  display_name: string;
+  score: number;
+}
+
+export interface MultiplayerRoomResponse {
+  code: string;
+  status: 'waiting' | 'playing' | 'finished' | string;
+  total_rounds: number;
+  round_index: number;
+  round_number: number;
+  current_initials: string;
+  initials_player_count: number;
+  host: MultiplayerPlayerState;
+  guest: MultiplayerPlayerState | null;
+  last_message: string;
+  last_winner_id: string | null;
+  last_matched_name: string;
+  winner_id: string | null;
+  you_are: 'host' | 'guest' | null;
+  accepted?: boolean | null;
+  your_feedback?: string | null;
+}

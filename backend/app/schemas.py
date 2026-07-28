@@ -576,3 +576,45 @@ class SubmitScoreResponse(BaseModel):
     is_new_best: bool
     rank: int | None = None
 
+
+class MultiplayerPlayerState(BaseModel):
+    player_id: str
+    display_name: str
+    score: int = 0
+
+
+class MultiplayerCreateRequest(BaseModel):
+    player_id: str = Field(min_length=8, max_length=64)
+    display_name: str = Field(min_length=1, max_length=40)
+
+
+class MultiplayerJoinRequest(BaseModel):
+    code: str = Field(min_length=4, max_length=8)
+    player_id: str = Field(min_length=8, max_length=64)
+    display_name: str = Field(min_length=1, max_length=40)
+
+
+class MultiplayerGuessRequest(BaseModel):
+    code: str = Field(min_length=4, max_length=8)
+    player_id: str = Field(min_length=8, max_length=64)
+    guess: str = Field(min_length=2, max_length=80)
+
+
+class MultiplayerRoomResponse(BaseModel):
+    code: str
+    status: str
+    total_rounds: int = 10
+    round_index: int = 0
+    round_number: int = 1
+    current_initials: str = ""
+    initials_player_count: int = 0
+    host: MultiplayerPlayerState
+    guest: MultiplayerPlayerState | None = None
+    last_message: str = ""
+    last_winner_id: str | None = None
+    last_matched_name: str = ""
+    winner_id: str | None = None
+    you_are: str | None = None
+    accepted: bool | None = None
+    your_feedback: str | None = None
+

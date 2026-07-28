@@ -360,6 +360,85 @@ def _fuzzy_match_player(guess: str, candidates: list[GamePlayer]) -> tuple[GameP
     return best_player, best_score
 
 
+def generate_initials_sequence(
+    length: int = 10,
+    mode: str | None = None,
+) -> list[str]:
+    """Pre-generate a shared initials sequence for multiplayer matches."""
+    resolved_mode = _ensure_cache(mode)
+    sequence: list[str] = []
+    used: set[int] = set()
+    for _ in range(max(1, length)):
+        initials = random_initials(used, resolved_mode)
+        sequence.append(initials)
+        # Reserve one player from this initials set so later rounds stay distinct when possible.
+        candidates = [
+            player
+            for player in (_initials_index.get(resolved_mode) or {}).get(initials, [])
+            if player.nba_id not in used
+        ]
+        if candidates:
+            used.add(random.choice(candidates).nba_id)
+    return sequence
+
+
+def match_guess_for_initials(
+    initials: str,
+    guess: str,
+    used_player_ids: list[int] | None = None,
+    mode: str | None = None,
+) -> GuessResult:
+    """Validate a guess without advancing initials or ending the match on a miss."""
+    resolved_mode = _ensure_cache(mode)
+    players = _players_cache.get(resolved_mode) or []
+    initials_map = _initials_index.get(resolved_mode) or {}
+
+    used = set(used_player_ids or [])
+    target_initials = initials.strip().upper()
+    normalized = _normalize_text(guess)
+
+    if not normalized:
+        return GuessResult(correct=False, game_over=False, reason="Enter a player name.")
+
+    candidates = [player for player in initials_map.get(target_initials, []) if player.nba_id not in used]
+    player, score = _fuzzy_match_player(guess, candidates)
+
+    if player and score >= FUZZY_MATCH_THRESHOLD:
+        reason = (
+            "Correct!"
+            if score >= 0.99
+            else f"Close enough — counted as {player.full_name}."
+        )
+        return GuessResult(
+            correct=True,
+            game_over=False,
+            matched_name=player.full_name,
+            matched_nba_id=player.nba_id,
+            reason=reason,
+        )
+
+    pool_player, pool_score = _fuzzy_match_player(guess, players)
+    if pool_player and pool_score >= FUZZY_MATCH_THRESHOLD:
+        if pool_player.initials != target_initials:
+            return GuessResult(
+                correct=False,
+                game_over=False,
+                reason=f"{pool_player.full_name} does not match {target_initials}.",
+            )
+        if pool_player.nba_id in used:
+            return GuessResult(
+                correct=False,
+                game_over=False,
+                reason=f"{pool_player.full_name} was already used.",
+            )
+
+    return GuessResult(
+        correct=False,
+        game_over=False,
+        reason=_invalid_player_message(resolved_mode),
+    )
+
+
 def validate_guess(
     initials: str,
     guess: str,

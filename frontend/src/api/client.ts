@@ -5,6 +5,7 @@ import type {
   HealthResponse,
   InitialsRevealResponse,
   LeaderboardResponse,
+  MultiplayerRoomResponse,
   SubmitScoreResponse,
 } from '@/types';
 
@@ -60,5 +61,24 @@ export const api = {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify({ score }),
+    }),
+  createMultiplayerRoom: (playerId: string, displayName: string) =>
+    request<MultiplayerRoomResponse>('/multiplayer/create', {
+      method: 'POST',
+      body: JSON.stringify({ player_id: playerId, display_name: displayName }),
+    }),
+  joinMultiplayerRoom: (code: string, playerId: string, displayName: string) =>
+    request<MultiplayerRoomResponse>('/multiplayer/join', {
+      method: 'POST',
+      body: JSON.stringify({ code, player_id: playerId, display_name: displayName }),
+    }),
+  getMultiplayerRoom: (code: string, playerId: string) =>
+    request<MultiplayerRoomResponse>(
+      `/multiplayer/room/${encodeURIComponent(code)}?player_id=${encodeURIComponent(playerId)}`,
+    ),
+  submitMultiplayerGuess: (code: string, playerId: string, guess: string) =>
+    request<MultiplayerRoomResponse>('/multiplayer/guess', {
+      method: 'POST',
+      body: JSON.stringify({ code, player_id: playerId, guess }),
     }),
 };

@@ -2,9 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/api/client';
 import { useLeaderboardAuth } from '@/hooks/useLeaderboardAuth';
 import { LeaderboardPanel } from '@/LeaderboardPanel';
+import { MultiplayerRoom } from '@/MultiplayerRoom';
 import type { GamePhase, InitialsRevealEntry, SessionRound } from '@/types';
 
 const DEFAULT_TIMER_SECONDS = 30;
+
+type AppMode = 'home' | 'solo' | 'versus';
 
 export function GamePage() {
   const {
@@ -18,6 +21,7 @@ export function GamePage() {
     submitNotice,
   } = useLeaderboardAuth();
 
+  const [mode, setMode] = useState<AppMode>('home');
   const [phase, setPhase] = useState<GamePhase>('idle');
   const [initials, setInitials] = useState('');
   const [initialsPlayerCount, setInitialsPlayerCount] = useState(0);
@@ -208,6 +212,7 @@ export function GamePage() {
       setLeaderboardMessage('');
       submittedScoreRef.current = null;
       setTimerGeneration((n) => n + 1);
+      setMode('solo');
       setPhase('playing');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start game');
@@ -296,9 +301,11 @@ export function GamePage() {
       </header>
 
       <section className="card flex flex-1 flex-col p-6 sm:p-8">
-        {loading && phase === 'idle' ? (
+        {mode === 'versus' ? (
+          <MultiplayerRoom onExit={() => setMode('home')} />
+        ) : loading && mode === 'home' ? (
           <p className="text-center text-slate-400">Loading players...</p>
-        ) : phase === 'idle' ? (
+        ) : mode === 'home' ? (
           <div className="flex flex-1 flex-col items-center justify-center text-center">
             <p className="max-w-md text-lg text-slate-300">
               You get <strong className="text-white">{timerSeconds} seconds</strong> per initials. Guess any NBA
@@ -312,9 +319,18 @@ export function GamePage() {
               <li>✗ Wrong name or invalid player → game over</li>
               <li>✗ Time runs out → game over</li>
             </ul>
-            <button type="button" onClick={() => void handleStart()} className="btn-primary mt-8 px-10 py-3 text-lg">
-              Start Game
-            </button>
+            <div className="mt-8 flex w-full max-w-sm flex-col gap-3">
+              <button type="button" onClick={() => void handleStart()} className="btn-primary px-10 py-3 text-lg">
+                Start Game
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('versus')}
+                className="rounded-xl border border-court-500 px-10 py-3 text-lg font-medium text-white hover:border-accent"
+              >
+                Play a Friend
+              </button>
+            </div>
 
             {leaderboardEnabled && (
               <div className="mt-10 w-full max-w-md">
@@ -532,13 +548,25 @@ export function GamePage() {
                   </div>
                 )}
 
-                <button
-                  type="button"
-                  onClick={() => void handleStart()}
-                  className="btn-primary mx-auto mt-8 px-8 py-3"
-                >
-                  Play Again
-                </button>
+                <div className="mx-auto mt-8 flex flex-wrap justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void handleStart()}
+                    className="btn-primary px-8 py-3"
+                  >
+                    Play Again
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('home');
+                      setPhase('idle');
+                    }}
+                    className="rounded-xl border border-court-500 px-8 py-3 text-white hover:border-accent"
+                  >
+                    Back to menu
+                  </button>
+                </div>
               </div>
             )}
           </>
