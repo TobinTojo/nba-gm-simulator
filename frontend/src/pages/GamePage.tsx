@@ -12,7 +12,7 @@ export function GamePage() {
     user,
     session,
     authLoading,
-    signInWithGitHub,
+    signInWithGoogle,
     signOut,
     submitScore,
     submitNotice,
@@ -433,14 +433,14 @@ export function GamePage() {
                       ) : (
                         <div className="space-y-3">
                           <p className="text-sm text-slate-400">
-                            Sign in with GitHub to save this score to the leaderboard.
+                            Sign in with Google to save this score to the leaderboard.
                           </p>
                           <button
                             type="button"
-                            onClick={() => void signInWithGitHub(score)}
+                            onClick={() => void signInWithGoogle(score)}
                             className="btn-primary w-full py-3"
                           >
-                            Sign in with GitHub
+                            Sign in with Google
                           </button>
                         </div>
                       )}

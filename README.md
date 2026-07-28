@@ -31,7 +31,7 @@ A fast-paced NBA trivia game. You get **30 seconds** to guess an all-time NBA pl
 | Frontend | React, TypeScript, Vite, Tailwind CSS |
 | Backend | Python, FastAPI |
 | Player data | Bundled JSON (~5,100 players with career seasons) |
-| Leaderboard | Supabase (GitHub OAuth + Postgres) |
+| Leaderboard | Supabase (Google OAuth + Postgres) |
 | Hosting | Netlify (frontend) + Render (API) |
 
 ---
@@ -175,7 +175,7 @@ Save your **database password** — you need it for the Postgres connection stri
 
 If Supabase warns about RLS, choose **Run and enable RLS**, then also run `backend/sql/leaderboard_fix_rls.sql`.
 
-#### 3. Enable GitHub sign-in
+#### 3. Enable Google sign-in
 
 **Authentication → URL Configuration:**
 
@@ -184,16 +184,17 @@ If Supabase warns about RLS, choose **Run and enable RLS**, then also run `backe
 | Site URL | `https://nbanamerush.netlify.app` |
 | Redirect URLs | `https://nbanamerush.netlify.app` |
 
-Create a GitHub OAuth app at [github.com/settings/developers](https://github.com/settings/developers):
+In [Google Cloud Console](https://console.cloud.google.com):
 
-| Field | Value |
-|---|---|
-| Homepage URL | `https://nbanamerush.netlify.app` |
-| Authorization callback URL | `https://<project-ref>.supabase.co/auth/v1/callback` |
+1. Create a project and configure the **OAuth consent screen** (External).
+2. **APIs & Services → Credentials → Create OAuth client ID** (Web application).
+3. Set:
+   - **Authorized JavaScript origins:** `https://nbanamerush.netlify.app`
+   - **Authorized redirect URIs:** `https://<project-ref>.supabase.co/auth/v1/callback`
 
 Your **project ref** is the subdomain in your Supabase URL (e.g. `https://abc123.supabase.co` → ref is `abc123`).
 
-Then **Authentication → Providers → GitHub** → Enable → paste Client ID and Secret.
+Then **Authentication → Providers → Google** → Enable → paste Client ID and Secret.
 
 #### 4. Copy environment variables
 
@@ -218,14 +219,15 @@ Then **Authentication → Providers → GitHub** → Enable → paste Client ID 
 
 #### How it works
 
-After game over, players sign in with GitHub. The score submits automatically. Each user appears **once** on the leaderboard with their **highest score only**.
+After game over, players sign in with Google. The score submits automatically. Each user appears **once** on the leaderboard with their **highest score only**.
 
 #### Troubleshooting
 
 | Symptom | Fix |
 |---|---|
 | Leaderboard hidden on site | Add Netlify env vars and redeploy with cache cleared |
-| DNS error on GitHub sign-in | Check `VITE_SUPABASE_URL` for typos in the project ref |
+| DNS error on Google sign-in | Check `VITE_SUPABASE_URL` for typos in the project ref |
+| Google sign-in blocked / only you can sign in | OAuth consent screen is in Testing — add test users or Publish the app |
 | 401 on score submit | Add `SUPABASE_URL` on Render and redeploy |
 | 500 on score submit | Add `SUPABASE_SERVICE_ROLE_KEY` on Render; run `leaderboard_fix_rls.sql` |
 

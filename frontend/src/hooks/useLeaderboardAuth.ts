@@ -63,13 +63,13 @@ export function useLeaderboardAuth() {
     };
   }, [trySubmitPendingScore]);
 
-  const signInWithGitHub = useCallback(async (pendingScore?: number) => {
+  const signInWithGoogle = useCallback(async (pendingScore?: number) => {
     if (!supabase) return;
     if (pendingScore !== undefined) {
       sessionStorage.setItem(PENDING_SCORE_KEY, String(pendingScore));
     }
     await supabase.auth.signInWithOAuth({
-      provider: 'github',
+      provider: 'google',
       options: {
         redirectTo: window.location.origin,
       },
@@ -88,7 +88,7 @@ export function useLeaderboardAuth() {
     authLoading,
     submitNotice,
     clearSubmitNotice: () => setSubmitNotice(null),
-    signInWithGitHub,
+    signInWithGoogle,
     signOut,
     submitScore,
   };
