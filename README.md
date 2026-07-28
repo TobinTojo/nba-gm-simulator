@@ -21,7 +21,7 @@ A fast-paced NBA trivia game. You get **30 seconds** to guess an all-time NBA pl
 - Close spellings still count (e.g. "Lebron James" → LeBron James)
 - Suffixes like Jr., III are handled correctly (Otto Porter Jr. = **OP**)
 - On game over, see every valid player for each round with their career span
-- **Play a Friend:** private room (Google sign-in required), same 10 initials, first correct answer wins each round
+- **Play a Friend:** private room (Google sign-in required), same 9 initials, 30s per round, first correct answer wins each round
 
 ---
 
@@ -245,7 +245,7 @@ After game over, players sign in with Google. The score submits automatically. E
 | POST | `/api/game/reveal` | Get all players matching initials (game over) |
 | GET | `/api/leaderboard?limit=25` | Top scores (optional `Authorization: Bearer` to highlight your row) |
 | POST | `/api/leaderboard/submit` | Submit score (requires Supabase JWT; upserts one row per user) |
-| POST | `/api/multiplayer/create` | Create a private 1v1 room (10 shared initials) |
+| POST | `/api/multiplayer/create` | Create a private 1v1 room (9 shared initials, 30s rounds) |
 | POST | `/api/multiplayer/join` | Join a room by code |
 | GET | `/api/multiplayer/room/{code}` | Poll room state |
 | POST | `/api/multiplayer/guess` | Submit a race guess (first correct wins the round) |

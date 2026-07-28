@@ -16,7 +16,8 @@ from app.services.name_game_service import (
 )
 
 ROOM_CODE_LENGTH = 6
-TOTAL_ROUNDS = 10
+TOTAL_ROUNDS = 9
+ROUND_SECONDS = 30
 ROOM_TTL_SECONDS = 60 * 60
 CODE_ALPHABET = string.ascii_uppercase + string.digits
 
@@ -41,6 +42,7 @@ class MultiplayerRoom:
     last_message: str = "Waiting for opponent..."
     last_winner_id: str | None = None
     last_matched_name: str = ""
+    round_started_at: float | None = None
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
 
@@ -77,6 +79,60 @@ def _current_initials(room: MultiplayerRoom) -> str:
     return room.sequence[room.round_index]
 
 
+def _finish_match(room: MultiplayerRoom) -> None:
+    room.status = "finished"
+    room.round_started_at = None
+    if room.host_score > room.guest_score:
+        room.last_message = f"{room.host.display_name} wins {room.host_score}-{room.guest_score}!"
+    elif room.guest_score > room.host_score:
+        guest_name = room.guest.display_name if room.guest else "Guest"
+        room.last_message = f"{guest_name} wins {room.guest_score}-{room.host_score}!"
+    else:
+        room.last_message = f"Draw! {room.host_score}-{room.guest_score}"
+
+
+def _advance_round(room: MultiplayerRoom, message: str) -> None:
+    room.round_index += 1
+    room.last_winner_id = None
+    room.last_matched_name = ""
+    if room.round_index >= TOTAL_ROUNDS:
+        _finish_match(room)
+    else:
+        room.round_started_at = time.time()
+        room.last_message = message
+
+
+def _time_left(room: MultiplayerRoom) -> int | None:
+    if room.status != "playing" or room.round_started_at is None:
+        return None
+    elapsed = time.time() - room.round_started_at
+    return max(0, int(ROUND_SECONDS - elapsed))
+
+
+def _maybe_expire_round(room: MultiplayerRoom) -> bool:
+    """Advance the round if the 30s timer expired. Returns True if a timeout happened."""
+    if room.status != "playing" or room.round_started_at is None:
+        return False
+    if time.time() - room.round_started_at < ROUND_SECONDS:
+        return False
+
+    timed_out_initials = _current_initials(room)
+    if room.round_index + 1 >= TOTAL_ROUNDS:
+        room.round_index += 1
+        room.last_winner_id = None
+        room.last_matched_name = ""
+        _finish_match(room)
+        room.last_message = f"Time's up on {timed_out_initials}. {room.last_message}"
+    else:
+        next_round = room.round_index + 2
+        _advance_round(
+            room,
+            f"Time's up on {timed_out_initials} — nobody scored. Round {next_round} — go!",
+        )
+    room.updated_at = time.time()
+    return True
+
+
 def serialize_room(room: MultiplayerRoom, viewer_id: str | None = None) -> dict[str, Any]:
     initials = _current_initials(room)
     you_are = None
@@ -93,12 +149,16 @@ def serialize_room(room: MultiplayerRoom, viewer_id: str | None = None) -> dict[
         elif room.guest_score > room.host_score:
             winner_id = room.guest.player_id if room.guest else None
 
+    time_left = _time_left(room)
+
     return {
         "code": room.code,
         "status": room.status,
         "total_rounds": TOTAL_ROUNDS,
+        "round_seconds": ROUND_SECONDS,
         "round_index": room.round_index,
         "round_number": min(room.round_index + 1, TOTAL_ROUNDS),
+        "time_left": time_left,
         "current_initials": initials,
         "initials_player_count": count_players_for_initials(initials) if initials else 0,
         "host": {
@@ -159,10 +219,12 @@ def join_room(code: str, player_id: str, display_name: str) -> dict[str, Any]:
             raise MultiplayerError("Room not found.", 404)
 
         if player_id == room.host.player_id:
+            _maybe_expire_round(room)
             room.updated_at = time.time()
             return serialize_room(room, player_id)
 
         if room.guest and room.guest.player_id == player_id:
+            _maybe_expire_round(room)
             room.updated_at = time.time()
             return serialize_room(room, player_id)
 
@@ -180,6 +242,7 @@ def join_room(code: str, player_id: str, display_name: str) -> dict[str, Any]:
         room.used_player_ids = []
         room.last_winner_id = None
         room.last_matched_name = ""
+        room.round_started_at = time.time()
         room.last_message = f"{name} joined. Round 1 — go!"
         room.updated_at = time.time()
         return serialize_room(room, player_id)
@@ -192,6 +255,7 @@ def get_room(code: str, viewer_id: str | None = None) -> dict[str, Any]:
         room = _rooms.get(room_code)
         if room is None:
             raise MultiplayerError("Room not found.", 404)
+        _maybe_expire_round(room)
         room.updated_at = time.time()
         return serialize_room(room, viewer_id)
 
@@ -206,6 +270,9 @@ def submit_guess(code: str, player_id: str, guess: str) -> dict[str, Any]:
         room = _rooms.get(room_code)
         if room is None:
             raise MultiplayerError("Room not found.", 404)
+
+        _maybe_expire_round(room)
+
         if room.status != "playing":
             raise MultiplayerError("Match is not in progress.")
 
@@ -241,20 +308,19 @@ def submit_guess(code: str, player_id: str, guess: str) -> dict[str, Any]:
         room.used_player_ids.append(result.matched_nba_id)
         room.last_winner_id = player_id
         room.last_matched_name = result.matched_name
-        room.round_index += 1
 
-        if room.round_index >= TOTAL_ROUNDS:
-            room.status = "finished"
-            if room.host_score > room.guest_score:
-                room.last_message = f"{room.host.display_name} wins {room.host_score}-{room.guest_score}!"
-            elif room.guest_score > room.host_score:
-                guest_name = room.guest.display_name if room.guest else "Guest"
-                room.last_message = f"{guest_name} wins {room.guest_score}-{room.host_score}!"
-            else:
-                room.last_message = f"Draw! {room.host_score}-{room.guest_score}"
-        else:
+        if room.round_index + 1 >= TOTAL_ROUNDS:
+            room.round_index += 1
+            _finish_match(room)
             room.last_message = (
-                f"{winner_name} got {result.matched_name}! Round {room.round_index + 1} — go!"
+                f"{winner_name} got {result.matched_name}! "
+                + room.last_message
+            )
+        else:
+            next_round = room.round_index + 2
+            _advance_round(
+                room,
+                f"{winner_name} got {result.matched_name}! Round {next_round} — go!",
             )
 
         room.updated_at = time.time()

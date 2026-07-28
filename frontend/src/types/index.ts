@@ -96,8 +96,10 @@ export interface MultiplayerRoomResponse {
   code: string;
   status: 'waiting' | 'playing' | 'finished' | string;
   total_rounds: number;
+  round_seconds: number;
   round_index: number;
   round_number: number;
+  time_left: number | null;
   current_initials: string;
   initials_player_count: number;
   host: MultiplayerPlayerState;

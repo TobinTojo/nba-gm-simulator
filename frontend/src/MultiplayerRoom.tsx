@@ -16,6 +16,7 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [displayTime, setDisplayTime] = useState(30);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const accessToken = session?.access_token;
@@ -47,6 +48,21 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
       inputRef.current?.focus();
     }
   }, [room?.status, room?.current_initials]);
+
+  useEffect(() => {
+    if (room?.status !== 'playing' || room.time_left == null) {
+      setDisplayTime(room?.round_seconds ?? 30);
+      return;
+    }
+    const base = room.time_left;
+    const startedAt = Date.now();
+    setDisplayTime(base);
+    const interval = window.setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+      setDisplayTime(Math.max(0, base - elapsed));
+    }, 200);
+    return () => window.clearInterval(interval);
+  }, [room?.status, room?.time_left, room?.round_index, room?.round_seconds]);
 
   async function handleCreate() {
     if (!accessToken) return;
@@ -156,7 +172,8 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
         <p className="text-sm uppercase tracking-wider text-accent">Head to Head</p>
         <h2 className="mt-2 font-display text-3xl font-bold text-white">Play a Friend</h2>
         <p className="mt-3 max-w-md text-slate-400">
-          Same 10 initials for both of you. First correct answer wins the round.
+          Same 9 initials for both of you. First correct answer wins the round. You get 30 seconds
+          per round — if nobody scores, it moves on.
         </p>
         <p className="mt-4 text-sm text-slate-300">
           Signed in as <span className="text-white">{displayName}</span>
@@ -257,10 +274,31 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
 
       {room.status === 'playing' && (
         <>
-          <div className="mb-6 text-center">
+          <div className="mb-4 flex items-center justify-between gap-4">
             <p className="text-xs uppercase tracking-wider text-slate-500">
               Round {room.round_number} / {room.total_rounds}
             </p>
+            <p
+              className={`text-2xl font-bold tabular-nums ${
+                displayTime <= 5 ? 'text-red-400' : 'text-white'
+              }`}
+            >
+              {displayTime}s
+            </p>
+          </div>
+
+          <div className="mb-6 h-2 overflow-hidden rounded-full bg-court-800">
+            <div
+              className={`h-full transition-all duration-200 ease-linear ${
+                displayTime <= 5 ? 'bg-red-500' : 'bg-accent'
+              }`}
+              style={{
+                width: `${Math.max(0, (displayTime / (room.round_seconds || 30)) * 100)}%`,
+              }}
+            />
+          </div>
+
+          <div className="mb-6 text-center">
             <p className="mt-2 font-display text-7xl font-bold tracking-widest text-white sm:text-8xl">
               {room.current_initials}
             </p>

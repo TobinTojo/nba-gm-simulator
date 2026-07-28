@@ -595,9 +595,11 @@ class MultiplayerGuessRequest(BaseModel):
 class MultiplayerRoomResponse(BaseModel):
     code: str
     status: str
-    total_rounds: int = 10
+    total_rounds: int = 9
+    round_seconds: int = 30
     round_index: int = 0
     round_number: int = 1
+    time_left: int | None = None
     current_initials: str = ""
     initials_player_count: int = 0
     host: MultiplayerPlayerState
