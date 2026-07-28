@@ -19,10 +19,10 @@
   html[data-theme='dark'] {
     --bg: #070b10;
     --text: #e2e8f0;
+    --fg: #ffffff;
     --card: rgba(12, 18, 25, 0.7);
     --card-border: rgba(255, 255, 255, 0.1);
     --muted: #94a3b8;
-    --panel: rgba(7, 11, 16, 0.45);
     --nav: rgba(7, 11, 16, 0.75);
     --bg-image:
       radial-gradient(ellipse 80% 50% at 50% -20%, rgba(249, 115, 22, 0.12), transparent),
@@ -33,38 +33,94 @@
   html[data-theme='light'] {
     --bg: #f4efe6;
     --text: #0f172a;
-    --card: rgba(255, 255, 255, 0.82);
+    --fg: #0f172a;
+    --card: rgba(255, 255, 255, 0.88);
     --card-border: rgba(15, 23, 42, 0.1);
     --muted: #64748b;
-    --panel: rgba(255, 255, 255, 0.7);
-    --nav: rgba(244, 239, 230, 0.88);
+    --nav: rgba(244, 239, 230, 0.92);
     --bg-image:
       radial-gradient(ellipse 80% 50% at 50% -20%, rgba(249, 115, 22, 0.14), transparent),
       radial-gradient(ellipse 50% 40% at 100% 0%, rgba(14, 165, 233, 0.08), transparent),
       linear-gradient(180deg, #f7f2ea 0%, #efe7da 45%, #f4efe6 100%);
   }
 
-  html[data-theme='light'] .text-white {
+  /* Light cards use dark ink on cream surfaces */
+  html[data-theme='light'] .card {
+    color: #0f172a;
+  }
+
+  html[data-theme='light'] .card .text-white {
     color: #0f172a !important;
   }
 
-  html[data-theme='light'] .text-slate-300,
-  html[data-theme='light'] .text-slate-400,
-  html[data-theme='light'] .text-slate-500 {
+  html[data-theme='light'] .card .text-slate-300,
+  html[data-theme='light'] .card .text-slate-400,
+  html[data-theme='light'] .card .text-slate-500 {
     color: #475569 !important;
+  }
+
+  /* Dark grey panels keep light text (must beat .card .text-white) */
+  html[data-theme='light'] [class*='bg-court-'] {
+    color: #f8fafc;
+  }
+
+  html[data-theme='light'] [class*='bg-court-'].text-white,
+  html[data-theme='light'] [class*='bg-court-'] .text-white,
+  html[data-theme='light'] .card [class*='bg-court-'].text-white,
+  html[data-theme='light'] .card [class*='bg-court-'] .text-white,
+  html[data-theme='light'] .card [class*='bg-court-'] .font-display.text-white {
+    color: #ffffff !important;
+  }
+
+  html[data-theme='light'] [class*='bg-court-'] .text-slate-200,
+  html[data-theme='light'] [class*='bg-court-'] .text-slate-300,
+  html[data-theme='light'] .card [class*='bg-court-'] .text-slate-200,
+  html[data-theme='light'] .card [class*='bg-court-'] .text-slate-300 {
+    color: #e2e8f0 !important;
+  }
+
+  html[data-theme='light'] [class*='bg-court-'] .text-slate-400,
+  html[data-theme='light'] [class*='bg-court-'] .text-slate-500,
+  html[data-theme='light'] .card [class*='bg-court-'] .text-slate-400,
+  html[data-theme='light'] .card [class*='bg-court-'] .text-slate-500 {
+    color: #cbd5e1 !important;
+  }
+
+  /* Typed text in dark inputs stays white */
+  html[data-theme='light'] input,
+  html[data-theme='light'] textarea,
+  html[data-theme='light'] select,
+  html[data-theme='light'] .card input,
+  html[data-theme='light'] .card textarea,
+  html[data-theme='light'] .card select,
+  html[data-theme='light'] .card input.text-white,
+  html[data-theme='light'] .card textarea.text-white {
+    color: #ffffff !important;
+    caret-color: #ffffff;
+  }
+
+  html[data-theme='light'] input::placeholder,
+  html[data-theme='light'] textarea::placeholder {
+    color: #94a3b8 !important;
   }
 
   html[data-theme='light'] .border-white\/5,
   html[data-theme='light'] .border-white\/10,
   html[data-theme='light'] .border-white\/15 {
-    border-color: rgba(15, 23, 42, 0.1) !important;
+    border-color: rgba(15, 23, 42, 0.1);
+  }
+
+  html[data-theme='light'] [class*='bg-court-'].border-white\/5,
+  html[data-theme='light'] [class*='bg-court-'].border-white\/10,
+  html[data-theme='light'] [class*='bg-court-'].border-white\/15 {
+    border-color: rgba(255, 255, 255, 0.12);
   }
 
   html[data-theme='light'] .bg-white\/5,
   html[data-theme='light'] .bg-white\/10,
   html[data-theme='light'] .hover\:bg-white\/5:hover,
   html[data-theme='light'] .hover\:bg-white\/10:hover {
-    background-color: rgba(15, 23, 42, 0.05) !important;
+    background-color: rgba(15, 23, 42, 0.05);
   }
 
   ::selection {
@@ -73,6 +129,10 @@
 }
 
 @layer components {
+  .text-fg {
+    color: var(--fg);
+  }
+
   .card {
     border-radius: 1rem;
     border: 1px solid var(--card-border);

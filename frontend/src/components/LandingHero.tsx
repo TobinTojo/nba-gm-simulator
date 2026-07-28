@@ -20,7 +20,7 @@ export function LandingHero({
 
       <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 pb-20 pt-10 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:gap-6 lg:pb-24 lg:pt-16">
         <div className="animate-slide-up">
-          <p className="font-display text-5xl leading-[0.92] tracking-wide text-white sm:text-7xl lg:text-8xl">
+          <p className="font-display text-5xl leading-[0.92] tracking-wide text-fg sm:text-7xl lg:text-8xl">
             NAME
             <span className="block text-accent">RUSH</span>
           </p>

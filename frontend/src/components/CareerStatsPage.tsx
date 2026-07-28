@@ -58,7 +58,7 @@ export function CareerStatsPage({
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 py-10 sm:px-6">
       <div className="animate-slide-up">
         <p className="text-xs font-semibold uppercase tracking-[0.35em] text-accent">Career</p>
-        <h1 className="mt-2 font-display text-5xl tracking-wide text-white">Your Stats</h1>
+        <h1 className="mt-2 font-display text-5xl tracking-wide text-fg">Your Stats</h1>
         <p className="mt-3 text-slate-400">Solo run history tied to your Google account.</p>
       </div>
 

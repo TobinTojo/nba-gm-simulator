@@ -2,14 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/api/client';
 import type { ProfileResponse } from '@/types';
 import type { Session, User } from '@supabase/supabase-js';
-import { SettingsMenu } from '@/components/SettingsMenu';
 
 interface SiteNavProps {
-  mode: 'home' | 'solo' | 'versus' | 'stats';
+  mode: 'home' | 'solo' | 'versus' | 'stats' | 'settings';
   onGoHome: () => void;
   onPlaySolo: () => void;
   onPlayFriends: () => void;
   onOpenStats: () => void;
+  onOpenSettings: () => void;
   onScrollAbout: () => void;
   enabled: boolean;
   user: User | null;
@@ -26,6 +26,7 @@ export function SiteNav({
   onPlaySolo,
   onPlayFriends,
   onOpenStats,
+  onOpenSettings,
   onScrollAbout,
   enabled,
   user,
@@ -36,7 +37,6 @@ export function SiteNav({
   profileRefreshKey = 0,
 }: SiteNavProps) {
   const [open, setOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -103,7 +103,7 @@ export function SiteNav({
             <img src="/basketball.png" alt="" className="h-6 w-6 object-contain transition group-hover:rotate-45" />
           </span>
           <span>
-            <span className="block font-display text-lg leading-none tracking-wide text-white sm:text-xl">
+            <span className="block font-display text-lg leading-none tracking-wide text-fg sm:text-xl">
               NAME RUSH
             </span>
             <span className="mt-0.5 hidden text-[10px] uppercase tracking-[0.28em] text-slate-500 sm:block">
@@ -134,6 +134,13 @@ export function SiteNav({
           >
             Stats
           </button>
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className={`nav-link ${mode === 'settings' ? 'nav-link-active' : ''}`}
+          >
+            Settings
+          </button>
           {mode === 'home' && (
             <button type="button" onClick={onScrollAbout} className="nav-link">
               About
@@ -144,8 +151,8 @@ export function SiteNav({
         <div className="relative flex items-center gap-2" ref={menuRef}>
           <button
             type="button"
-            onClick={() => setSettingsOpen(true)}
-            className="rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:border-accent/40 hover:text-white"
+            onClick={onOpenSettings}
+            className={`nav-link md:hidden ${mode === 'settings' ? 'nav-link-active' : ''}`}
           >
             Settings
           </button>
@@ -227,7 +234,6 @@ export function SiteNav({
           )}
         </div>
       </div>
-      <SettingsMenu open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </header>
   );
 }

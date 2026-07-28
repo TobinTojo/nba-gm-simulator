@@ -4,6 +4,7 @@ import { AboutSection } from '@/components/AboutSection';
 import { CareerStatsPage } from '@/components/CareerStatsPage';
 import { LandingHero } from '@/components/LandingHero';
 import { LeaveGameModal } from '@/components/LeaveGameModal';
+import { SettingsPage } from '@/components/SettingsPage';
 import { SiteNav } from '@/components/SiteNav';
 import { useSettings } from '@/context/SettingsContext';
 import { useLeaderboardAuth } from '@/hooks/useLeaderboardAuth';
@@ -15,7 +16,7 @@ import type { GamePhase, InitialsRevealEntry, SessionRound } from '@/types';
 const DEFAULT_TIMER_SECONDS = 30;
 const LOW_TIME_SECONDS = 5;
 
-type AppMode = 'home' | 'solo' | 'versus' | 'stats';
+type AppMode = 'home' | 'solo' | 'versus' | 'stats' | 'settings';
 
 export function GamePage() {
   const { soundEnabled } = useSettings();
@@ -468,6 +469,12 @@ export function GamePage() {
             setPhase('idle');
           })
         }
+        onOpenSettings={() =>
+          requestNavigation(() => {
+            setMode('settings');
+            setPhase('idle');
+          })
+        }
         onScrollAbout={scrollAbout}
         enabled={leaderboardEnabled}
         user={user}
@@ -488,7 +495,9 @@ export function GamePage() {
         onLeave={() => void confirmLeaveAndSave()}
       />
 
-      {mode === 'stats' ? (
+      {mode === 'settings' ? (
+        <SettingsPage onBack={goHome} />
+      ) : mode === 'stats' ? (
         <CareerStatsPage
           enabled={leaderboardEnabled}
           user={user}
@@ -513,7 +522,7 @@ export function GamePage() {
                 <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.35em] text-accent">Standings</p>
-                    <h2 className="mt-2 font-display text-4xl tracking-wide text-white">Leaderboard</h2>
+                    <h2 className="mt-2 font-display text-4xl tracking-wide text-fg">Leaderboard</h2>
                   </div>
                   {submitNotice && (
                     <p className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300">
