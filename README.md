@@ -31,6 +31,7 @@ A fast-paced NBA trivia game. You get **30 seconds** to guess an all-time NBA pl
 | Frontend | React, TypeScript, Vite, Tailwind CSS |
 | Backend | Python, FastAPI |
 | Player data | Bundled JSON (~5,100 players with career seasons) |
+| Leaderboard | Supabase (GitHub OAuth + Postgres) |
 | Hosting | Netlify (frontend) + Render (API) |
 
 ---
@@ -75,14 +76,22 @@ nba-gm-simulator/
 │   │   ├── main.py              # FastAPI entry point
 │   │   ├── config.py            # Settings + CORS
 │   │   ├── routers/game.py      # Game API routes
+│   │   ├── routers/leaderboard.py
 │   │   └── services/
-│   │       └── name_game_service.py  # Game logic, fuzzy match, scoring
+│   │       ├── name_game_service.py  # Game logic, fuzzy match, scoring
+│   │       ├── auth_service.py       # Supabase JWT verification
+│   │       └── leaderboard_service.py
+│   ├── sql/
+│   │   ├── leaderboard.sql           # Create leaderboard table
+│   │   └── leaderboard_fix_rls.sql   # Fix permissions if writes fail
 │   ├── data/
 │   │   └── all_time_players.json     # Player pool (required for deploy)
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
 │   │   ├── pages/GamePage.tsx   # Main game UI
+│   │   ├── LeaderboardPanel.tsx
+│   │   ├── hooks/useLeaderboardAuth.ts
 │   │   └── api/client.ts        # API client
 │   └── public/_redirects        # Netlify API proxy fallback
 └── netlify.toml                 # Netlify build + deploy config
@@ -111,13 +120,15 @@ The app is split across two free hosts:
 
 **Environment variables:**
 
-| Key | Value |
-|---|---|
-| `CORS_ORIGINS_EXTRA` | `https://your-site.netlify.app` (no trailing slash) |
-| `LEADERBOARD_DATABASE_URL` | Supabase Postgres connection string (optional; enables leaderboard) |
-| `SUPABASE_URL` | Supabase project URL, e.g. `https://xyz.supabase.co` (required for sign-in) |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase **secret** key (`sb_secret_...`) — used for score writes |
-| `SUPABASE_JWT_SECRET` | Legacy JWT secret (optional; newer projects use asymmetric keys via `SUPABASE_URL`) |
+| Key | Required | Value |
+|---|---|---|
+| `CORS_ORIGINS_EXTRA` | Yes | `https://your-site.netlify.app` (no trailing slash) |
+| `SUPABASE_URL` | For leaderboard | `https://<project-ref>.supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY` | For leaderboard | Secret key from Supabase → Settings → API Keys (`sb_secret_...`) |
+| `LEADERBOARD_DATABASE_URL` | Optional | Postgres URI from Supabase **Connect** button (Session pooler) |
+| `SUPABASE_JWT_SECRET` | Optional | Only needed on legacy Supabase projects (new projects use JWKS via `SUPABASE_URL`) |
+
+> **Tip:** Score writes use the Supabase REST API with the service role key. The Postgres URI is optional (used as a fallback for reads/writes).
 
 ### Netlify (frontend)
 
@@ -131,32 +142,92 @@ Netlify reads `netlify.toml` automatically:
 
 `VITE_API_URL` is set in `netlify.toml` to point at the Render API.
 
-**Additional environment variables for the online leaderboard** (set in Netlify → Site configuration → Environment variables):
+**Additional environment variables for the online leaderboard** (Netlify → Site configuration → Environment variables):
 
 | Key | Value |
 |---|---|
-| `VITE_SUPABASE_URL` | Your Supabase project URL |
-| `VITE_SUPABASE_ANON_KEY` | Supabase anon/public key |
+| `VITE_SUPABASE_URL` | `https://<project-ref>.supabase.co` (base URL, no `/rest/v1/`) |
+| `VITE_SUPABASE_ANON_KEY` | Publishable key from Supabase → Settings → API Keys (`sb_publishable_...`) |
 
 If these are omitted, the game works normally but the leaderboard UI is hidden.
 
-After changing env vars on either host, trigger a **fresh deploy** (clear cache on Netlify).
+> **Important:** Vite bakes `VITE_*` vars in at build time. After adding or changing them, trigger **Clear cache and deploy** on Netlify.
+
+After changing env vars on either host, trigger a **fresh deploy**.
 
 ### Online leaderboard setup (Supabase)
 
-1. Create a free [Supabase](https://supabase.com) project.
-2. In **Authentication → Providers**, enable **GitHub** and add your OAuth app callback URL (`https://<project-ref>.supabase.co/auth/v1/callback`).
-3. In **SQL Editor**, run the migration in `backend/sql/leaderboard.sql` (creates one row per user, keeps highest score only).
-4. Copy from **Project Settings → API**:
-   - Project URL → `VITE_SUPABASE_URL` (Netlify)
-   - anon public key → `VITE_SUPABASE_ANON_KEY` (Netlify)
-   - Project URL → `SUPABASE_URL` (Render)
-   - Secret key → `SUPABASE_SERVICE_ROLE_KEY` (Render)
-   - JWT Secret → `SUPABASE_JWT_SECRET` (Render, optional on newer projects)
-5. Copy from **Connect → Direct → Session pooler → URI** the Postgres connection string → `LEADERBOARD_DATABASE_URL` (Render).
-6. Redeploy Netlify and Render.
+#### 1. Create a Supabase project
 
-**How it works:** After game over, players sign in with GitHub. The score is submitted automatically. Each user appears once on the leaderboard with their personal best.
+At [supabase.com](https://supabase.com) → **New project**:
+
+| Setting | Recommendation |
+|---|---|
+| Connect GitHub | Skip (not needed for player sign-in) |
+| Automatically expose new tables | **Uncheck** (safer) |
+| Enable automatic RLS | Leave unchecked |
+
+Save your **database password** — you need it for the Postgres connection string.
+
+#### 2. Create the leaderboard table
+
+**SQL Editor → New query** → paste and run `backend/sql/leaderboard.sql`.
+
+If Supabase warns about RLS, choose **Run and enable RLS**, then also run `backend/sql/leaderboard_fix_rls.sql`.
+
+#### 3. Enable GitHub sign-in
+
+**Authentication → URL Configuration:**
+
+| Field | Value |
+|---|---|
+| Site URL | `https://nbanamerush.netlify.app` |
+| Redirect URLs | `https://nbanamerush.netlify.app` |
+
+Create a GitHub OAuth app at [github.com/settings/developers](https://github.com/settings/developers):
+
+| Field | Value |
+|---|---|
+| Homepage URL | `https://nbanamerush.netlify.app` |
+| Authorization callback URL | `https://<project-ref>.supabase.co/auth/v1/callback` |
+
+Your **project ref** is the subdomain in your Supabase URL (e.g. `https://abc123.supabase.co` → ref is `abc123`).
+
+Then **Authentication → Providers → GitHub** → Enable → paste Client ID and Secret.
+
+#### 4. Copy environment variables
+
+**Supabase → Settings → API Keys:**
+
+| Copy this | Put it on |
+|---|---|
+| Project URL (`https://<ref>.supabase.co`) | Netlify → `VITE_SUPABASE_URL` and Render → `SUPABASE_URL` |
+| Publishable key (`sb_publishable_...`) | Netlify → `VITE_SUPABASE_ANON_KEY` |
+| Secret key (`sb_secret_...`) | Render → `SUPABASE_SERVICE_ROLE_KEY` |
+
+**Supabase → Connect button (top bar) → Direct → Session pooler → URI** (optional):
+
+| Copy this | Put it on |
+|---|---|
+| Postgres URI (replace `[YOUR-PASSWORD]`) | Render → `LEADERBOARD_DATABASE_URL` |
+
+#### 5. Deploy
+
+1. **Render** — save env vars → Manual Deploy → Deploy latest commit
+2. **Netlify** — save env vars → Clear cache and deploy
+
+#### How it works
+
+After game over, players sign in with GitHub. The score submits automatically. Each user appears **once** on the leaderboard with their **highest score only**.
+
+#### Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| Leaderboard hidden on site | Add Netlify env vars and redeploy with cache cleared |
+| DNS error on GitHub sign-in | Check `VITE_SUPABASE_URL` for typos in the project ref |
+| 401 on score submit | Add `SUPABASE_URL` on Render and redeploy |
+| 500 on score submit | Add `SUPABASE_SERVICE_ROLE_KEY` on Render; run `leaderboard_fix_rls.sql` |
 
 ---
 
