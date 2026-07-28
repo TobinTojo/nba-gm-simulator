@@ -4,6 +4,16 @@ import { useLeaderboardAuth } from '@/hooks/useLeaderboardAuth';
 import type { MultiplayerRoomResponse } from '@/types';
 
 const ROUND_OPTIONS = [9, 12, 15] as const;
+const ERA_OPTIONS = [
+  { value: 'all_time', label: 'All-time' },
+  { value: '60s', label: '1960s' },
+  { value: '70s', label: '1970s' },
+  { value: '80s', label: '1980s' },
+  { value: '90s', label: '1990s' },
+  { value: '2000s', label: '2000s' },
+  { value: '2010s', label: '2010s' },
+  { value: '2020s', label: '2020s' },
+] as const;
 
 interface MultiplayerRoomProps {
   onExit: () => void;
@@ -13,6 +23,7 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
   const { enabled, user, session, authLoading, signInWithGoogle, signOut } = useLeaderboardAuth();
   const [joinCode, setJoinCode] = useState('');
   const [selectedRounds, setSelectedRounds] = useState<(typeof ROUND_OPTIONS)[number]>(9);
+  const [selectedEra, setSelectedEra] = useState<(typeof ERA_OPTIONS)[number]['value']>('all_time');
   const [room, setRoom] = useState<MultiplayerRoomResponse | null>(null);
   const [guess, setGuess] = useState('');
   const [feedback, setFeedback] = useState('');
@@ -72,7 +83,7 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
     setBusy(true);
     setError(null);
     try {
-      const created = await api.createMultiplayerRoom(accessToken, selectedRounds);
+      const created = await api.createMultiplayerRoom(accessToken, selectedRounds, selectedEra);
       setRoom(created);
       setFeedback('');
     } catch (err) {
@@ -101,20 +112,15 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
     }
   }
 
-  async function handleRoundsChange(value: string) {
-    const rounds = Number(value) as (typeof ROUND_OPTIONS)[number];
-    if (!ROUND_OPTIONS.includes(rounds)) return;
-    setSelectedRounds(rounds);
-
+  async function updateLobbySettings(next: { totalRounds?: number; era?: string }) {
     if (!room || !accessToken || !room.you_are_host || room.status !== 'waiting') return;
-
     setBusy(true);
     setError(null);
     try {
-      const updated = await api.setMultiplayerRounds(room.code, rounds, accessToken);
+      const updated = await api.setMultiplayerSettings(room.code, accessToken, next);
       setRoom(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not update rounds.');
+      setError(err instanceof Error ? err.message : 'Could not update settings.');
     } finally {
       setBusy(false);
     }
@@ -130,6 +136,25 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
       setFeedback('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start match.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handlePass() {
+    if (!room || !accessToken || room.status !== 'playing' || busy || room.you_passed) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await api.passMultiplayerRound(room.code, accessToken);
+      setRoom(next);
+      setFeedback(
+        next.pass_count >= next.players.length
+          ? 'Everyone passed — skipping round.'
+          : `Passed (${next.pass_count}/${next.players.length})`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not pass.');
     } finally {
       setBusy(false);
     }
@@ -209,8 +234,8 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
         <p className="text-sm uppercase tracking-wider text-accent">Multiplayer</p>
         <h2 className="mt-2 font-display text-3xl font-bold text-white">Play with Friends</h2>
         <p className="mt-3 max-w-md text-slate-400">
-          Up to 4 players. Same initials for everyone. First correct answer wins the round. 30
-          seconds per round.
+          Up to 4 players. Pick an era, race to name players, and pass only skips when everyone
+          passes.
         </p>
         <p className="mt-4 text-sm text-slate-300">
           Signed in as <span className="text-white">{displayName}</span>
@@ -223,20 +248,36 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
           Sign out
         </button>
 
-        <label className="mt-8 w-full max-w-sm text-left text-sm text-slate-400">
-          Rounds
-          <select
-            value={selectedRounds}
-            onChange={(e) => setSelectedRounds(Number(e.target.value) as (typeof ROUND_OPTIONS)[number])}
-            className="mt-2 w-full rounded-xl border border-court-600 bg-court-900 px-4 py-3 text-white focus:border-accent focus:outline-none"
-          >
-            {ROUND_OPTIONS.map((rounds) => (
-              <option key={rounds} value={rounds}>
-                {rounds} rounds
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="mt-8 grid w-full max-w-sm gap-3 text-left">
+          <label className="text-sm text-slate-400">
+            Era
+            <select
+              value={selectedEra}
+              onChange={(e) => setSelectedEra(e.target.value as (typeof ERA_OPTIONS)[number]['value'])}
+              className="mt-2 w-full rounded-xl border border-court-600 bg-court-900 px-4 py-3 text-white focus:border-accent focus:outline-none"
+            >
+              {ERA_OPTIONS.map((era) => (
+                <option key={era.value} value={era.value}>
+                  {era.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm text-slate-400">
+            Rounds
+            <select
+              value={selectedRounds}
+              onChange={(e) => setSelectedRounds(Number(e.target.value) as (typeof ROUND_OPTIONS)[number])}
+              className="mt-2 w-full rounded-xl border border-court-600 bg-court-900 px-4 py-3 text-white focus:border-accent focus:outline-none"
+            >
+              {ROUND_OPTIONS.map((rounds) => (
+                <option key={rounds} value={rounds}>
+                  {rounds} rounds
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
 
         <div className="mt-4 flex w-full max-w-sm flex-col gap-3">
           <button
@@ -295,6 +336,9 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
             {room.code}
           </button>
           {copied && <p className="text-xs text-emerald-400">Copied</p>}
+          <p className="mt-1 text-xs text-slate-500">
+            {room.era_label} · {room.total_rounds} rounds
+          </p>
         </div>
         <button type="button" onClick={onExit} className="text-sm text-slate-500 underline hover:text-slate-300">
           Leave
@@ -310,6 +354,7 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
             <p className="truncate text-xs uppercase tracking-wider text-slate-500">
               {player.display_name}
               {player.is_host ? ' · Host' : ''}
+              {player.has_passed ? ' · Passed' : ''}
             </p>
             <p className="mt-1 text-2xl font-bold text-white">{player.score}</p>
           </div>
@@ -335,11 +380,26 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
           {room.you_are_host ? (
             <div className="mt-6 w-full max-w-xs space-y-3">
               <label className="block text-left text-sm text-slate-400">
+                Era
+                <select
+                  value={room.era}
+                  disabled={busy}
+                  onChange={(e) => void updateLobbySettings({ era: e.target.value })}
+                  className="mt-2 w-full rounded-xl border border-court-600 bg-court-900 px-4 py-3 text-white focus:border-accent focus:outline-none disabled:opacity-50"
+                >
+                  {ERA_OPTIONS.map((era) => (
+                    <option key={era.value} value={era.value}>
+                      {era.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-left text-sm text-slate-400">
                 Rounds
                 <select
                   value={room.total_rounds}
                   disabled={busy}
-                  onChange={(e) => void handleRoundsChange(e.target.value)}
+                  onChange={(e) => void updateLobbySettings({ totalRounds: Number(e.target.value) })}
                   className="mt-2 w-full rounded-xl border border-court-600 bg-court-900 px-4 py-3 text-white focus:border-accent focus:outline-none disabled:opacity-50"
                 >
                   {ROUND_OPTIONS.map((rounds) => (
@@ -360,7 +420,7 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
             </div>
           ) : (
             <p className="mt-6 text-sm text-slate-400">
-              Waiting for host to start · {room.total_rounds} rounds
+              Waiting for host · {room.era_label} · {room.total_rounds} rounds
             </p>
           )}
 
@@ -372,7 +432,7 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
         <>
           <div className="mb-4 flex items-center justify-between gap-4">
             <p className="text-xs uppercase tracking-wider text-slate-500">
-              Round {room.round_number} / {room.total_rounds}
+              Round {room.round_number} / {room.total_rounds} · {room.era_label}
             </p>
             <p
               className={`text-2xl font-bold tabular-nums ${
@@ -401,12 +461,16 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
             {room.initials_player_count > 0 && (
               <p className="mt-3 text-sm text-slate-400">
                 {room.initials_player_count === 1
-                  ? '1 player has these initials'
-                  : `${room.initials_player_count} players have these initials`}
+                  ? '1 unused player left for these initials'
+                  : `${room.initials_player_count} unused players left for these initials`}
               </p>
             )}
             <p className="mt-3 text-sm text-emerald-400">{room.last_message}</p>
             {feedback && <p className="mt-2 text-sm text-slate-400">{feedback}</p>}
+            <p className="mt-2 text-xs text-slate-500">
+              Passes {room.pass_count}/{room.players.length}
+              {room.you_passed ? ' · you passed' : ''}
+            </p>
           </div>
 
           <form onSubmit={(e) => void handleGuess(e)} className="mt-auto">
@@ -415,18 +479,28 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
               type="text"
               value={guess}
               onChange={(e) => setGuess(e.target.value)}
-              disabled={busy}
+              disabled={busy || room.you_passed}
               autoComplete="off"
               placeholder="Type full name"
-              className="w-full rounded-xl border border-court-600 bg-court-900 px-4 py-4 text-lg text-white placeholder:text-slate-600 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+              className="w-full rounded-xl border border-court-600 bg-court-900 px-4 py-4 text-lg text-white placeholder:text-slate-600 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30 disabled:opacity-50"
             />
-            <button
-              type="submit"
-              disabled={busy || !guess.trim()}
-              className="btn-primary mt-4 w-full py-3 text-lg disabled:opacity-50"
-            >
-              {busy ? 'Checking...' : 'Submit'}
-            </button>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                disabled={busy || room.you_passed}
+                onClick={() => void handlePass()}
+                className="rounded-xl border border-court-500 py-3 text-lg font-medium text-white hover:border-accent disabled:opacity-50"
+              >
+                {room.you_passed ? 'Passed' : 'Pass'}
+              </button>
+              <button
+                type="submit"
+                disabled={busy || room.you_passed || !guess.trim()}
+                className="btn-primary py-3 text-lg disabled:opacity-50"
+              >
+                {busy ? 'Checking...' : 'Submit'}
+              </button>
+            </div>
           </form>
         </>
       )}

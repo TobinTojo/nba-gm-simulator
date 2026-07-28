@@ -92,6 +92,7 @@ export interface MultiplayerPlayerState {
   score: number;
   is_host: boolean;
   is_you: boolean;
+  has_passed: boolean;
 }
 
 export interface MultiplayerRoomResponse {
@@ -99,6 +100,8 @@ export interface MultiplayerRoomResponse {
   status: 'waiting' | 'playing' | 'finished' | string;
   max_players: number;
   total_rounds: number;
+  era: string;
+  era_label: string;
   round_seconds: number;
   round_index: number;
   round_number: number;
@@ -106,6 +109,8 @@ export interface MultiplayerRoomResponse {
   current_initials: string;
   initials_player_count: number;
   players: MultiplayerPlayerState[];
+  pass_count: number;
+  you_passed: boolean;
   last_message: string;
   last_winner_id: string | null;
   last_matched_name: string;

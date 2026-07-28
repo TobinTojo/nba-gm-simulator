@@ -10,9 +10,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.services.name_game_service import (
-    count_players_for_initials,
+    count_players_for_initials_era,
+    era_label,
     generate_initials_sequence,
     match_guess_for_initials,
+    normalize_era,
 )
 
 ROOM_CODE_LENGTH = 6
@@ -22,6 +24,7 @@ MAX_PLAYERS = 4
 ROUND_SECONDS = 30
 ROOM_TTL_SECONDS = 60 * 60
 CODE_ALPHABET = string.ascii_uppercase + string.digits
+DEFAULT_ERA = "all_time"
 
 
 @dataclass
@@ -37,10 +40,12 @@ class MultiplayerRoom:
     host_id: str
     players: list[RoomPlayer]
     total_rounds: int
+    era: str
     sequence: list[str]
     status: str = "waiting"  # waiting | playing | finished
     round_index: int = 0
     used_player_ids: list[int] = field(default_factory=list)
+    round_passes: set[str] = field(default_factory=set)
     last_message: str = "Waiting for players..."
     last_winner_id: str | None = None
     last_matched_name: str = ""
@@ -83,6 +88,13 @@ def _normalize_rounds(total_rounds: int | None) -> int:
     return total_rounds
 
 
+def _build_sequence(total_rounds: int, era: str) -> list[str]:
+    try:
+        return generate_initials_sequence(total_rounds, "all_time", era)
+    except ValueError as exc:
+        raise MultiplayerError(str(exc)) from exc
+
+
 def _find_player(room: MultiplayerRoom, player_id: str) -> RoomPlayer | None:
     for player in room.players:
         if player.player_id == player_id:
@@ -99,6 +111,7 @@ def _current_initials(room: MultiplayerRoom) -> str:
 def _finish_match(room: MultiplayerRoom) -> None:
     room.status = "finished"
     room.round_started_at = None
+    room.round_passes.clear()
     if not room.players:
         room.last_message = "Match over."
         return
@@ -116,6 +129,7 @@ def _advance_round(room: MultiplayerRoom, message: str) -> None:
     room.round_index += 1
     room.last_winner_id = None
     room.last_matched_name = ""
+    room.round_passes.clear()
     if room.round_index >= room.total_rounds:
         _finish_match(room)
     else:
@@ -141,6 +155,7 @@ def _maybe_expire_round(room: MultiplayerRoom) -> bool:
         room.round_index += 1
         room.last_winner_id = None
         room.last_matched_name = ""
+        room.round_passes.clear()
         _finish_match(room)
         room.last_message = f"Time's up on {timed_out_initials}. {room.last_message}"
     else:
@@ -157,6 +172,7 @@ def serialize_room(room: MultiplayerRoom, viewer_id: str | None = None) -> dict[
     initials = _current_initials(room)
     you_are_host = bool(viewer_id and viewer_id == room.host_id)
     in_room = bool(viewer_id and _find_player(room, viewer_id))
+    you_passed = bool(viewer_id and viewer_id in room.round_passes)
 
     winner_ids: list[str] = []
     if room.status == "finished" and room.players:
@@ -168,12 +184,20 @@ def serialize_room(room: MultiplayerRoom, viewer_id: str | None = None) -> dict[
         "status": room.status,
         "max_players": MAX_PLAYERS,
         "total_rounds": room.total_rounds,
+        "era": room.era,
+        "era_label": era_label(room.era),
         "round_seconds": ROUND_SECONDS,
         "round_index": room.round_index,
         "round_number": min(room.round_index + 1, room.total_rounds),
         "time_left": _time_left(room),
         "current_initials": initials,
-        "initials_player_count": count_players_for_initials(initials) if initials else 0,
+        "initials_player_count": count_players_for_initials_era(
+            initials,
+            room.era,
+            used_player_ids=room.used_player_ids,
+        )
+        if initials
+        else 0,
         "players": [
             {
                 "player_id": player.player_id,
@@ -181,9 +205,12 @@ def serialize_room(room: MultiplayerRoom, viewer_id: str | None = None) -> dict[
                 "score": player.score,
                 "is_host": player.player_id == room.host_id,
                 "is_you": viewer_id == player.player_id,
+                "has_passed": player.player_id in room.round_passes,
             }
             for player in room.players
         ],
+        "pass_count": len(room.round_passes),
+        "you_passed": you_passed,
         "last_message": room.last_message,
         "last_winner_id": room.last_winner_id,
         "last_matched_name": room.last_matched_name,
@@ -194,26 +221,36 @@ def serialize_room(room: MultiplayerRoom, viewer_id: str | None = None) -> dict[
     }
 
 
-def create_room(player_id: str, display_name: str, total_rounds: int | None = None) -> dict[str, Any]:
+def create_room(
+    player_id: str,
+    display_name: str,
+    total_rounds: int | None = None,
+    era: str | None = None,
+) -> dict[str, Any]:
     name = display_name.strip()[:40] or "Player 1"
     player_id = player_id.strip()
     if not player_id:
         raise MultiplayerError("Missing player id.")
 
     rounds = _normalize_rounds(total_rounds)
+    resolved_era = normalize_era(era)
+    sequence = _build_sequence(rounds, resolved_era)
 
     with _lock:
         _cleanup_expired_locked()
         code = _new_code()
-        sequence = generate_initials_sequence(rounds, "all_time")
         host = RoomPlayer(player_id=player_id, display_name=name)
         room = MultiplayerRoom(
             code=code,
             host_id=player_id,
             players=[host],
             total_rounds=rounds,
+            era=resolved_era,
             sequence=sequence,
-            last_message=f"Share this code. Waiting for players ({rounds} rounds).",
+            last_message=(
+                f"Share this code. Waiting for players "
+                f"({rounds} rounds · {era_label(resolved_era)})."
+            ),
         )
         _rooms[code] = room
         return serialize_room(room, player_id)
@@ -252,25 +289,39 @@ def join_room(code: str, player_id: str, display_name: str) -> dict[str, Any]:
         return serialize_room(room, player_id)
 
 
-def set_rounds(code: str, player_id: str, total_rounds: int) -> dict[str, Any]:
+def set_settings(
+    code: str,
+    player_id: str,
+    total_rounds: int | None = None,
+    era: str | None = None,
+) -> dict[str, Any]:
     room_code = code.strip().upper()
     player_id = player_id.strip()
-    rounds = _normalize_rounds(total_rounds)
 
     with _lock:
         room = _rooms.get(room_code)
         if room is None:
             raise MultiplayerError("Room not found.", 404)
         if player_id != room.host_id:
-            raise MultiplayerError("Only the host can change rounds.", 403)
+            raise MultiplayerError("Only the host can change lobby settings.", 403)
         if room.status != "waiting":
-            raise MultiplayerError("Rounds can only be changed before the match starts.")
+            raise MultiplayerError("Settings can only be changed before the match starts.")
 
-        room.total_rounds = rounds
-        room.sequence = generate_initials_sequence(rounds, "all_time")
-        room.last_message = f"Host set the match to {rounds} rounds."
+        if total_rounds is not None:
+            room.total_rounds = _normalize_rounds(total_rounds)
+        if era is not None:
+            room.era = normalize_era(era)
+
+        room.sequence = _build_sequence(room.total_rounds, room.era)
+        room.last_message = (
+            f"Host set {room.total_rounds} rounds · {era_label(room.era)}."
+        )
         room.updated_at = time.time()
         return serialize_room(room, player_id)
+
+
+def set_rounds(code: str, player_id: str, total_rounds: int) -> dict[str, Any]:
+    return set_settings(code, player_id, total_rounds=total_rounds)
 
 
 def start_match(code: str, player_id: str) -> dict[str, Any]:
@@ -293,10 +344,13 @@ def start_match(code: str, player_id: str) -> dict[str, Any]:
         room.status = "playing"
         room.round_index = 0
         room.used_player_ids = []
+        room.round_passes.clear()
         room.last_winner_id = None
         room.last_matched_name = ""
         room.round_started_at = time.time()
-        room.last_message = f"Match started — Round 1 of {room.total_rounds}!"
+        room.last_message = (
+            f"Match started — Round 1 of {room.total_rounds} ({era_label(room.era)})!"
+        )
         room.updated_at = time.time()
         return serialize_room(room, player_id)
 
@@ -311,6 +365,52 @@ def get_room(code: str, viewer_id: str | None = None) -> dict[str, Any]:
         _maybe_expire_round(room)
         room.updated_at = time.time()
         return serialize_room(room, viewer_id)
+
+
+def submit_pass(code: str, player_id: str) -> dict[str, Any]:
+    room_code = code.strip().upper()
+    player_id = player_id.strip()
+    if not player_id:
+        raise MultiplayerError("Missing player id.")
+
+    with _lock:
+        room = _rooms.get(room_code)
+        if room is None:
+            raise MultiplayerError("Room not found.", 404)
+
+        _maybe_expire_round(room)
+
+        if room.status != "playing":
+            raise MultiplayerError("Match is not in progress.")
+
+        player = _find_player(room, player_id)
+        if player is None:
+            raise MultiplayerError("You are not in this room.", 403)
+
+        room.round_passes.add(player_id)
+        passed = len(room.round_passes)
+        needed = len(room.players)
+        room.updated_at = time.time()
+
+        if passed >= needed:
+            timed_out_initials = _current_initials(room)
+            if room.round_index + 1 >= room.total_rounds:
+                room.round_index += 1
+                room.last_winner_id = None
+                room.last_matched_name = ""
+                room.round_passes.clear()
+                _finish_match(room)
+                room.last_message = f"Everyone passed on {timed_out_initials}. {room.last_message}"
+            else:
+                next_round = room.round_index + 2
+                _advance_round(
+                    room,
+                    f"Everyone passed on {timed_out_initials}. Round {next_round} — go!",
+                )
+        else:
+            room.last_message = f"{player.display_name} passed ({passed}/{needed})."
+
+        return serialize_room(room, player_id)
 
 
 def submit_guess(code: str, player_id: str, guess: str) -> dict[str, Any]:
@@ -339,6 +439,7 @@ def submit_guess(code: str, player_id: str, guess: str) -> dict[str, Any]:
             guess,
             used_player_ids=room.used_player_ids,
             mode="all_time",
+            era=room.era,
         )
 
         if not result.correct:
@@ -353,6 +454,7 @@ def submit_guess(code: str, player_id: str, guess: str) -> dict[str, Any]:
         room.used_player_ids.append(result.matched_nba_id)
         room.last_winner_id = player_id
         room.last_matched_name = result.matched_name
+        room.round_passes.clear()
 
         if room.round_index + 1 >= room.total_rounds:
             room.round_index += 1

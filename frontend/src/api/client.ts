@@ -62,11 +62,11 @@ export const api = {
       headers: { Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify({ score }),
     }),
-  createMultiplayerRoom: (accessToken: string, totalRounds = 9) =>
+  createMultiplayerRoom: (accessToken: string, totalRounds = 9, era = 'all_time') =>
     request<MultiplayerRoomResponse>('/multiplayer/create', {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
-      body: JSON.stringify({ total_rounds: totalRounds }),
+      body: JSON.stringify({ total_rounds: totalRounds, era }),
     }),
   joinMultiplayerRoom: (code: string, accessToken: string) =>
     request<MultiplayerRoomResponse>('/multiplayer/join', {
@@ -74,11 +74,19 @@ export const api = {
       headers: { Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify({ code }),
     }),
-  setMultiplayerRounds: (code: string, totalRounds: number, accessToken: string) =>
+  setMultiplayerSettings: (
+    code: string,
+    accessToken: string,
+    settings: { totalRounds?: number; era?: string },
+  ) =>
     request<MultiplayerRoomResponse>('/multiplayer/rounds', {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
-      body: JSON.stringify({ code, total_rounds: totalRounds }),
+      body: JSON.stringify({
+        code,
+        total_rounds: settings.totalRounds,
+        era: settings.era,
+      }),
     }),
   startMultiplayerMatch: (code: string, accessToken: string) =>
     request<MultiplayerRoomResponse>('/multiplayer/start', {
@@ -89,6 +97,12 @@ export const api = {
   getMultiplayerRoom: (code: string, accessToken: string) =>
     request<MultiplayerRoomResponse>(`/multiplayer/room/${encodeURIComponent(code)}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
+    }),
+  passMultiplayerRound: (code: string, accessToken: string) =>
+    request<MultiplayerRoomResponse>('/multiplayer/pass', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ code }),
     }),
   submitMultiplayerGuess: (code: string, guess: string, accessToken: string) =>
     request<MultiplayerRoomResponse>('/multiplayer/guess', {

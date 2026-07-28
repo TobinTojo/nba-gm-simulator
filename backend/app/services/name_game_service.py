@@ -35,6 +35,8 @@ class GamePlayer:
     team_abbrev: str
     from_season: str = ""
     to_season: str = ""
+    from_year: int = 0
+    to_year: int = 0
 
 
 @dataclass(frozen=True)
@@ -114,6 +116,85 @@ def _career_seasons(pdata: dict) -> tuple[str, str]:
     return "", ""
 
 
+def _career_years(pdata: dict, from_season: str, to_season: str) -> tuple[int, int]:
+    from_year = pdata.get("from_year")
+    to_year = pdata.get("to_year")
+    if isinstance(from_year, int) and isinstance(to_year, int):
+        return from_year, to_year
+    try:
+        start = int(from_season.split("-", 1)[0]) if from_season else 0
+    except ValueError:
+        start = 0
+    try:
+        end = int(to_season.split("-", 1)[0]) if to_season else start
+    except ValueError:
+        end = start
+    return start, end
+
+
+ERA_RANGES: dict[str, tuple[int, int]] = {
+    "all_time": (1946, 2100),
+    "60s": (1960, 1969),
+    "70s": (1970, 1979),
+    "80s": (1980, 1989),
+    "90s": (1990, 1999),
+    "2000s": (2000, 2009),
+    "2010s": (2010, 2019),
+    "2020s": (2020, 2029),
+}
+
+ERA_LABELS: dict[str, str] = {
+    "all_time": "All-time",
+    "60s": "1960s",
+    "70s": "1970s",
+    "80s": "1980s",
+    "90s": "1990s",
+    "2000s": "2000s",
+    "2010s": "2010s",
+    "2020s": "2020s",
+}
+
+VALID_ERAS = frozenset(ERA_RANGES.keys())
+
+
+def normalize_era(era: str | None) -> str:
+    key = (era or "all_time").strip().lower()
+    if key in {"all", "alltime", "all-time"}:
+        return "all_time"
+    if key not in VALID_ERAS:
+        return "all_time"
+    return key
+
+
+def era_label(era: str | None) -> str:
+    return ERA_LABELS.get(normalize_era(era), "All-time")
+
+
+def _player_in_era(player: GamePlayer, era: str) -> bool:
+    resolved = normalize_era(era)
+    if resolved == "all_time":
+        return True
+    start, end = ERA_RANGES[resolved]
+    # Career overlaps the decade.
+    return player.from_year <= end and player.to_year >= start
+
+
+def _players_for_era(era: str | None = None, mode: str | None = None) -> list[GamePlayer]:
+    resolved_mode = _ensure_cache(mode)
+    players = _players_cache.get(resolved_mode) or []
+    resolved_era = normalize_era(era)
+    if resolved_era == "all_time":
+        return players
+    return [player for player in players if _player_in_era(player, resolved_era)]
+
+
+def _initials_index_for_players(players: list[GamePlayer]) -> dict[str, list[GamePlayer]]:
+    index: dict[str, list[GamePlayer]] = {}
+    for player in players:
+        index.setdefault(player.initials, []).append(player)
+    return index
+
+
 def format_career_span(from_season: str, to_season: str) -> str:
     if not from_season:
         return "Unknown"
@@ -190,6 +271,7 @@ def _build_all_time_player_pool() -> list[GamePlayer]:
             continue
         full_name = str(pdata.get("full_name") or f"{first} {last}").strip()
         from_season, to_season = _career_seasons(pdata)
+        from_year, to_year = _career_years(pdata, from_season, to_season)
         players.append(
             GamePlayer(
                 nba_id=int(pdata["nba_id"]),
@@ -200,6 +282,8 @@ def _build_all_time_player_pool() -> list[GamePlayer]:
                 team_abbrev="NBA",
                 from_season=from_season,
                 to_season=to_season,
+                from_year=from_year,
+                to_year=to_year,
             )
         )
     return players
@@ -363,23 +447,43 @@ def _fuzzy_match_player(guess: str, candidates: list[GamePlayer]) -> tuple[GameP
 def generate_initials_sequence(
     length: int = 10,
     mode: str | None = None,
+    era: str | None = None,
 ) -> list[str]:
     """Pre-generate a shared initials sequence for multiplayer matches."""
-    resolved_mode = _ensure_cache(mode)
+    players = _players_for_era(era, mode)
+    if not players:
+        raise ValueError(f"No players available for era '{normalize_era(era)}'.")
+    initials_map = _initials_index_for_players(players)
     sequence: list[str] = []
     used: set[int] = set()
     for _ in range(max(1, length)):
-        initials = random_initials(used, resolved_mode)
+        available = [player for player in players if player.nba_id not in used]
+        pool = available or players
+        initials = random.choice(pool).initials
         sequence.append(initials)
-        # Reserve one player from this initials set so later rounds stay distinct when possible.
         candidates = [
-            player
-            for player in (_initials_index.get(resolved_mode) or {}).get(initials, [])
-            if player.nba_id not in used
+            player for player in initials_map.get(initials, []) if player.nba_id not in used
         ]
         if candidates:
             used.add(random.choice(candidates).nba_id)
     return sequence
+
+
+def count_players_for_initials_era(
+    initials: str,
+    era: str | None = None,
+    mode: str | None = None,
+    used_player_ids: list[int] | None = None,
+) -> int:
+    used = set(used_player_ids or [])
+    initials_map = _initials_index_for_players(_players_for_era(era, mode))
+    return len(
+        [
+            player
+            for player in initials_map.get(initials.strip().upper(), [])
+            if player.nba_id not in used
+        ]
+    )
 
 
 def match_guess_for_initials(
@@ -387,11 +491,11 @@ def match_guess_for_initials(
     guess: str,
     used_player_ids: list[int] | None = None,
     mode: str | None = None,
+    era: str | None = None,
 ) -> GuessResult:
     """Validate a guess without advancing initials or ending the match on a miss."""
-    resolved_mode = _ensure_cache(mode)
-    players = _players_cache.get(resolved_mode) or []
-    initials_map = _initials_index.get(resolved_mode) or {}
+    players = _players_for_era(era, mode)
+    initials_map = _initials_index_for_players(players)
 
     used = set(used_player_ids or [])
     target_initials = initials.strip().upper()
@@ -429,13 +533,23 @@ def match_guess_for_initials(
             return GuessResult(
                 correct=False,
                 game_over=False,
-                reason=f"{pool_player.full_name} was already used.",
+                reason=f"{pool_player.full_name} was already used this match — pick another.",
             )
+
+    # Also catch already-used answers that fuzzy-matched outside unused candidates.
+    used_candidates = [player for player in initials_map.get(target_initials, []) if player.nba_id in used]
+    used_player, used_score = _fuzzy_match_player(guess, used_candidates)
+    if used_player and used_score >= FUZZY_MATCH_THRESHOLD:
+        return GuessResult(
+            correct=False,
+            game_over=False,
+            reason=f"{used_player.full_name} was already used this match — pick another.",
+        )
 
     return GuessResult(
         correct=False,
         game_over=False,
-        reason=_invalid_player_message(resolved_mode),
+        reason=_invalid_player_message(_ensure_cache(mode)),
     )
 
 

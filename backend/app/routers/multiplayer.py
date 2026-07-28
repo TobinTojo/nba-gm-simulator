@@ -6,6 +6,7 @@ from app.schemas import (
     MultiplayerCreateRequest,
     MultiplayerGuessRequest,
     MultiplayerJoinRequest,
+    MultiplayerPassRequest,
     MultiplayerRoomResponse,
     MultiplayerSetRoundsRequest,
     MultiplayerStartRequest,
@@ -16,9 +17,10 @@ from app.services.multiplayer_service import (
     create_room,
     get_room,
     join_room,
-    set_rounds,
+    set_settings,
     start_match,
     submit_guess,
+    submit_pass,
 )
 
 router = APIRouter()
@@ -35,7 +37,12 @@ def multiplayer_create(
 ) -> MultiplayerRoomResponse:
     claims = require_auth_user(authorization)
     try:
-        room = create_room(str(claims["sub"]), display_name_from_claims(claims), payload.total_rounds)
+        room = create_room(
+            str(claims["sub"]),
+            display_name_from_claims(claims),
+            payload.total_rounds,
+            payload.era,
+        )
     except MultiplayerError as exc:
         _raise(exc)
     return MultiplayerRoomResponse(**room)
@@ -61,7 +68,12 @@ def multiplayer_set_rounds(
 ) -> MultiplayerRoomResponse:
     claims = require_auth_user(authorization)
     try:
-        room = set_rounds(payload.code, str(claims["sub"]), payload.total_rounds)
+        room = set_settings(
+            payload.code,
+            str(claims["sub"]),
+            total_rounds=payload.total_rounds,
+            era=payload.era,
+        )
     except MultiplayerError as exc:
         _raise(exc)
     return MultiplayerRoomResponse(**room)
@@ -88,6 +100,19 @@ def multiplayer_get_room(
     claims = require_auth_user(authorization)
     try:
         room = get_room(code, str(claims["sub"]))
+    except MultiplayerError as exc:
+        _raise(exc)
+    return MultiplayerRoomResponse(**room)
+
+
+@router.post("/multiplayer/pass", response_model=MultiplayerRoomResponse)
+def multiplayer_pass(
+    payload: MultiplayerPassRequest,
+    authorization: str | None = Header(default=None),
+) -> MultiplayerRoomResponse:
+    claims = require_auth_user(authorization)
+    try:
+        room = submit_pass(payload.code, str(claims["sub"]))
     except MultiplayerError as exc:
         _raise(exc)
     return MultiplayerRoomResponse(**room)
