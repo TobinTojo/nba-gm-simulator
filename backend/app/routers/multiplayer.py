@@ -1,11 +1,14 @@
-"""Private 1v1 multiplayer routes (Google sign-in required)."""
+"""Private multiplayer routes (Google sign-in required, 2–4 players)."""
 
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException
 
 from app.schemas import (
+    MultiplayerCreateRequest,
     MultiplayerGuessRequest,
     MultiplayerJoinRequest,
     MultiplayerRoomResponse,
+    MultiplayerSetRoundsRequest,
+    MultiplayerStartRequest,
 )
 from app.services.auth_service import display_name_from_claims, require_auth_user
 from app.services.multiplayer_service import (
@@ -13,6 +16,8 @@ from app.services.multiplayer_service import (
     create_room,
     get_room,
     join_room,
+    set_rounds,
+    start_match,
     submit_guess,
 )
 
@@ -24,10 +29,13 @@ def _raise(exc: MultiplayerError) -> None:
 
 
 @router.post("/multiplayer/create", response_model=MultiplayerRoomResponse)
-def multiplayer_create(authorization: str | None = Header(default=None)) -> MultiplayerRoomResponse:
+def multiplayer_create(
+    payload: MultiplayerCreateRequest,
+    authorization: str | None = Header(default=None),
+) -> MultiplayerRoomResponse:
     claims = require_auth_user(authorization)
     try:
-        room = create_room(str(claims["sub"]), display_name_from_claims(claims))
+        room = create_room(str(claims["sub"]), display_name_from_claims(claims), payload.total_rounds)
     except MultiplayerError as exc:
         _raise(exc)
     return MultiplayerRoomResponse(**room)
@@ -41,6 +49,32 @@ def multiplayer_join(
     claims = require_auth_user(authorization)
     try:
         room = join_room(payload.code, str(claims["sub"]), display_name_from_claims(claims))
+    except MultiplayerError as exc:
+        _raise(exc)
+    return MultiplayerRoomResponse(**room)
+
+
+@router.post("/multiplayer/rounds", response_model=MultiplayerRoomResponse)
+def multiplayer_set_rounds(
+    payload: MultiplayerSetRoundsRequest,
+    authorization: str | None = Header(default=None),
+) -> MultiplayerRoomResponse:
+    claims = require_auth_user(authorization)
+    try:
+        room = set_rounds(payload.code, str(claims["sub"]), payload.total_rounds)
+    except MultiplayerError as exc:
+        _raise(exc)
+    return MultiplayerRoomResponse(**room)
+
+
+@router.post("/multiplayer/start", response_model=MultiplayerRoomResponse)
+def multiplayer_start(
+    payload: MultiplayerStartRequest,
+    authorization: str | None = Header(default=None),
+) -> MultiplayerRoomResponse:
+    claims = require_auth_user(authorization)
+    try:
+        room = start_match(payload.code, str(claims["sub"]))
     except MultiplayerError as exc:
         _raise(exc)
     return MultiplayerRoomResponse(**room)

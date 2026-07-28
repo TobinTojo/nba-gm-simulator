@@ -62,13 +62,26 @@ export const api = {
       headers: { Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify({ score }),
     }),
-  createMultiplayerRoom: (accessToken: string) =>
+  createMultiplayerRoom: (accessToken: string, totalRounds = 9) =>
     request<MultiplayerRoomResponse>('/multiplayer/create', {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ total_rounds: totalRounds }),
     }),
   joinMultiplayerRoom: (code: string, accessToken: string) =>
     request<MultiplayerRoomResponse>('/multiplayer/join', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ code }),
+    }),
+  setMultiplayerRounds: (code: string, totalRounds: number, accessToken: string) =>
+    request<MultiplayerRoomResponse>('/multiplayer/rounds', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ code, total_rounds: totalRounds }),
+    }),
+  startMultiplayerMatch: (code: string, accessToken: string) =>
+    request<MultiplayerRoomResponse>('/multiplayer/start', {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify({ code }),

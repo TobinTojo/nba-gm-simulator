@@ -3,6 +3,8 @@ import { api } from '@/api/client';
 import { useLeaderboardAuth } from '@/hooks/useLeaderboardAuth';
 import type { MultiplayerRoomResponse } from '@/types';
 
+const ROUND_OPTIONS = [9, 12, 15] as const;
+
 interface MultiplayerRoomProps {
   onExit: () => void;
 }
@@ -10,6 +12,7 @@ interface MultiplayerRoomProps {
 export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
   const { enabled, user, session, authLoading, signInWithGoogle, signOut } = useLeaderboardAuth();
   const [joinCode, setJoinCode] = useState('');
+  const [selectedRounds, setSelectedRounds] = useState<(typeof ROUND_OPTIONS)[number]>(9);
   const [room, setRoom] = useState<MultiplayerRoomResponse | null>(null);
   const [guess, setGuess] = useState('');
   const [feedback, setFeedback] = useState('');
@@ -69,7 +72,7 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
     setBusy(true);
     setError(null);
     try {
-      const created = await api.createMultiplayerRoom(accessToken);
+      const created = await api.createMultiplayerRoom(accessToken, selectedRounds);
       setRoom(created);
       setFeedback('');
     } catch (err) {
@@ -93,6 +96,40 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
       setFeedback('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not join room.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRoundsChange(value: string) {
+    const rounds = Number(value) as (typeof ROUND_OPTIONS)[number];
+    if (!ROUND_OPTIONS.includes(rounds)) return;
+    setSelectedRounds(rounds);
+
+    if (!room || !accessToken || !room.you_are_host || room.status !== 'waiting') return;
+
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await api.setMultiplayerRounds(room.code, rounds, accessToken);
+      setRoom(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update rounds.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleStart() {
+    if (!room || !accessToken) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const started = await api.startMultiplayerMatch(room.code, accessToken);
+      setRoom(started);
+      setFeedback('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not start match.');
     } finally {
       setBusy(false);
     }
@@ -147,10 +184,10 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
   if (!user || !accessToken) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center text-center">
-        <p className="text-sm uppercase tracking-wider text-accent">Head to Head</p>
-        <h2 className="mt-2 font-display text-3xl font-bold text-white">Play a Friend</h2>
+        <p className="text-sm uppercase tracking-wider text-accent">Multiplayer</p>
+        <h2 className="mt-2 font-display text-3xl font-bold text-white">Play with Friends</h2>
         <p className="mt-3 max-w-md text-slate-400">
-          Both players must sign in with Google before creating or joining a room.
+          Everyone must sign in with Google before creating or joining a room (up to 4 players).
         </p>
         <button
           type="button"
@@ -169,11 +206,11 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
   if (!room) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center text-center">
-        <p className="text-sm uppercase tracking-wider text-accent">Head to Head</p>
-        <h2 className="mt-2 font-display text-3xl font-bold text-white">Play a Friend</h2>
+        <p className="text-sm uppercase tracking-wider text-accent">Multiplayer</p>
+        <h2 className="mt-2 font-display text-3xl font-bold text-white">Play with Friends</h2>
         <p className="mt-3 max-w-md text-slate-400">
-          Same 9 initials for both of you. First correct answer wins the round. You get 30 seconds
-          per round — if nobody scores, it moves on.
+          Up to 4 players. Same initials for everyone. First correct answer wins the round. 30
+          seconds per round.
         </p>
         <p className="mt-4 text-sm text-slate-300">
           Signed in as <span className="text-white">{displayName}</span>
@@ -186,7 +223,22 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
           Sign out
         </button>
 
-        <div className="mt-8 flex w-full max-w-sm flex-col gap-3">
+        <label className="mt-8 w-full max-w-sm text-left text-sm text-slate-400">
+          Rounds
+          <select
+            value={selectedRounds}
+            onChange={(e) => setSelectedRounds(Number(e.target.value) as (typeof ROUND_OPTIONS)[number])}
+            className="mt-2 w-full rounded-xl border border-court-600 bg-court-900 px-4 py-3 text-white focus:border-accent focus:outline-none"
+          >
+            {ROUND_OPTIONS.map((rounds) => (
+              <option key={rounds} value={rounds}>
+                {rounds} rounds
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="mt-4 flex w-full max-w-sm flex-col gap-3">
           <button
             type="button"
             disabled={busy}
@@ -225,10 +277,10 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
     );
   }
 
-  const hostScore = room.host.score;
-  const guestScore = room.guest?.score ?? 0;
-  const youWon = room.winner_id === playerId;
-  const isDraw = room.status === 'finished' && !room.winner_id;
+  const youWon = room.winner_ids.includes(playerId);
+  const isDraw = room.status === 'finished' && room.winner_ids.length > 1;
+  const scoreGridClass =
+    room.players.length <= 2 ? 'grid-cols-2' : room.players.length === 3 ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-4';
 
   return (
     <div className="flex flex-1 flex-col">
@@ -249,25 +301,69 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
         </button>
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-4">
-        <div className={`rounded-xl border p-4 ${room.you_are === 'host' ? 'border-accent' : 'border-court-700'}`}>
-          <p className="text-xs uppercase tracking-wider text-slate-500">{room.host.display_name}</p>
-          <p className="mt-1 text-3xl font-bold text-white">{hostScore}</p>
-        </div>
-        <div className={`rounded-xl border p-4 ${room.you_are === 'guest' ? 'border-accent' : 'border-court-700'}`}>
-          <p className="text-xs uppercase tracking-wider text-slate-500">
-            {room.guest?.display_name ?? 'Waiting...'}
-          </p>
-          <p className="mt-1 text-3xl font-bold text-white">{guestScore}</p>
-        </div>
+      <div className={`mb-6 grid gap-3 ${scoreGridClass}`}>
+        {room.players.map((player) => (
+          <div
+            key={player.player_id}
+            className={`rounded-xl border p-3 ${player.is_you ? 'border-accent' : 'border-court-700'}`}
+          >
+            <p className="truncate text-xs uppercase tracking-wider text-slate-500">
+              {player.display_name}
+              {player.is_host ? ' · Host' : ''}
+            </p>
+            <p className="mt-1 text-2xl font-bold text-white">{player.score}</p>
+          </div>
+        ))}
+        {room.status === 'waiting' &&
+          Array.from({ length: Math.max(0, room.max_players - room.players.length) }).map((_, index) => (
+            <div key={`empty-${index}`} className="rounded-xl border border-dashed border-court-700 p-3">
+              <p className="text-xs uppercase tracking-wider text-slate-600">Open slot</p>
+              <p className="mt-1 text-2xl font-bold text-slate-700">—</p>
+            </div>
+          ))}
       </div>
 
       {room.status === 'waiting' && (
         <div className="flex flex-1 flex-col items-center justify-center text-center">
-          <p className="text-lg text-slate-300">Waiting for your friend to join...</p>
+          <p className="text-lg text-slate-300">
+            Lobby · {room.players.length}/{room.max_players} players
+          </p>
           <p className="mt-2 text-sm text-slate-500">
             Share code <span className="text-white">{room.code}</span>
           </p>
+
+          {room.you_are_host ? (
+            <div className="mt-6 w-full max-w-xs space-y-3">
+              <label className="block text-left text-sm text-slate-400">
+                Rounds
+                <select
+                  value={room.total_rounds}
+                  disabled={busy}
+                  onChange={(e) => void handleRoundsChange(e.target.value)}
+                  className="mt-2 w-full rounded-xl border border-court-600 bg-court-900 px-4 py-3 text-white focus:border-accent focus:outline-none disabled:opacity-50"
+                >
+                  {ROUND_OPTIONS.map((rounds) => (
+                    <option key={rounds} value={rounds}>
+                      {rounds} rounds
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                disabled={busy || !room.can_start}
+                onClick={() => void handleStart()}
+                className="btn-primary w-full py-3 disabled:opacity-50"
+              >
+                {room.can_start ? 'Start Match' : 'Need at least 2 players'}
+              </button>
+            </div>
+          ) : (
+            <p className="mt-6 text-sm text-slate-400">
+              Waiting for host to start · {room.total_rounds} rounds
+            </p>
+          )}
+
           <p className="mt-6 text-sm text-slate-400">{room.last_message}</p>
         </div>
       )}
@@ -341,10 +437,16 @@ export function MultiplayerRoom({ onExit }: MultiplayerRoomProps) {
           <p className="mt-2 text-3xl font-bold text-white">
             {isDraw ? "It's a draw!" : youWon ? 'You win!' : 'You lose'}
           </p>
-          <p className="mt-3 text-lg text-slate-300">
-            {hostScore} – {guestScore}
-          </p>
-          <p className="mt-2 text-sm text-slate-400">{room.last_message}</p>
+          <div className="mt-4 space-y-1 text-sm text-slate-300">
+            {[...room.players]
+              .sort((a, b) => b.score - a.score)
+              .map((player) => (
+                <p key={player.player_id}>
+                  {player.display_name}: {player.score}
+                </p>
+              ))}
+          </div>
+          <p className="mt-3 text-sm text-slate-400">{room.last_message}</p>
           <button type="button" onClick={onExit} className="btn-primary mt-8 px-8 py-3">
             Back to menu
           </button>

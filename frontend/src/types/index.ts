@@ -90,11 +90,14 @@ export interface MultiplayerPlayerState {
   player_id: string;
   display_name: string;
   score: number;
+  is_host: boolean;
+  is_you: boolean;
 }
 
 export interface MultiplayerRoomResponse {
   code: string;
   status: 'waiting' | 'playing' | 'finished' | string;
+  max_players: number;
   total_rounds: number;
   round_seconds: number;
   round_index: number;
@@ -102,13 +105,14 @@ export interface MultiplayerRoomResponse {
   time_left: number | null;
   current_initials: string;
   initials_player_count: number;
-  host: MultiplayerPlayerState;
-  guest: MultiplayerPlayerState | null;
+  players: MultiplayerPlayerState[];
   last_message: string;
   last_winner_id: string | null;
   last_matched_name: string;
-  winner_id: string | null;
-  you_are: 'host' | 'guest' | null;
+  winner_ids: string[];
+  you_are_host: boolean;
+  in_room: boolean;
+  can_start: boolean;
   accepted?: boolean | null;
   your_feedback?: string | null;
 }

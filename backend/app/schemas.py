@@ -581,9 +581,24 @@ class MultiplayerPlayerState(BaseModel):
     player_id: str
     display_name: str
     score: int = 0
+    is_host: bool = False
+    is_you: bool = False
+
+
+class MultiplayerCreateRequest(BaseModel):
+    total_rounds: int = 9
 
 
 class MultiplayerJoinRequest(BaseModel):
+    code: str = Field(min_length=4, max_length=8)
+
+
+class MultiplayerSetRoundsRequest(BaseModel):
+    code: str = Field(min_length=4, max_length=8)
+    total_rounds: int
+
+
+class MultiplayerStartRequest(BaseModel):
     code: str = Field(min_length=4, max_length=8)
 
 
@@ -595,6 +610,7 @@ class MultiplayerGuessRequest(BaseModel):
 class MultiplayerRoomResponse(BaseModel):
     code: str
     status: str
+    max_players: int = 4
     total_rounds: int = 9
     round_seconds: int = 30
     round_index: int = 0
@@ -602,13 +618,14 @@ class MultiplayerRoomResponse(BaseModel):
     time_left: int | None = None
     current_initials: str = ""
     initials_player_count: int = 0
-    host: MultiplayerPlayerState
-    guest: MultiplayerPlayerState | None = None
+    players: list[MultiplayerPlayerState] = Field(default_factory=list)
     last_message: str = ""
     last_winner_id: str | None = None
     last_matched_name: str = ""
-    winner_id: str | None = None
-    you_are: str | None = None
+    winner_ids: list[str] = Field(default_factory=list)
+    you_are_host: bool = False
+    in_room: bool = False
+    can_start: bool = False
     accepted: bool | None = None
     your_feedback: str | None = None
 
