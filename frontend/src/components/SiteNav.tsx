@@ -98,14 +98,14 @@ export function SiteNav({
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
         <button type="button" onClick={onGoHome} className="group flex items-center gap-3 text-left">
           <span className="relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-accent shadow-[0_0_24px_rgba(249,115,22,0.35)]">
-            <img src="/basketball.svg" alt="" className="h-6 w-6 transition group-hover:rotate-45" />
+            <img src="/basketball.png" alt="" className="h-6 w-6 object-contain transition group-hover:rotate-45" />
           </span>
           <span>
             <span className="block font-display text-lg leading-none tracking-wide text-white sm:text-xl">
               NAME RUSH
             </span>
             <span className="mt-0.5 hidden text-[10px] uppercase tracking-[0.28em] text-slate-500 sm:block">
-              NBA Initials
+              Basketball Initials
             </span>
           </span>
         </button>

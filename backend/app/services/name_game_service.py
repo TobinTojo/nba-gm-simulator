@@ -324,13 +324,13 @@ def refresh_player_pool(mode: str | None = None) -> int:
 def _mode_label(mode: str) -> str:
     if mode == "current":
         return f"{settings.current_season} rosters"
-    return "All-time NBA"
+    return "All-time basketball"
 
 
 def _invalid_player_message(mode: str) -> str:
     if mode == "current":
-        return "That player is not on a current NBA roster."
-    return "That is not a valid NBA player."
+        return "That player is not on a current basketball roster."
+    return "That is not a valid basketball player."
 
 
 def get_game_status(mode: str | None = None) -> dict[str, str | int]:

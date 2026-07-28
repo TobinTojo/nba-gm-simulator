@@ -1,4 +1,4 @@
-"""API routes for the NBA initials name game."""
+"""API routes for the Name Rush initials game."""
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -30,7 +30,7 @@ def health_check(mode: str = Query(default="all_time")) -> HealthResponse:
     status = get_game_status(mode)
     return HealthResponse(
         status="ok",
-        app="NBA Initials",
+        app="Name Rush",
         player_count=int(status["player_count"]),
         season=str(status["season"]),
     )
@@ -59,9 +59,9 @@ def game_start(payload: GameStartRequest | None = None) -> GameStartResponse:
         refresh_player_pool(mode)
     if get_game_status(mode)["player_count"] == 0:
         detail = (
-            "Could not load all-time NBA players."
+            "Could not load all-time basketball players."
             if mode == "all_time"
-            else "Could not load current NBA players."
+            else "Could not load current basketball players."
         )
         raise HTTPException(status_code=503, detail=detail)
     round_payload = start_round([], mode)

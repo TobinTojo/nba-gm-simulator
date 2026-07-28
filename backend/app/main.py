@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(
     title=settings.app_name,
-    description="NBA initials name-guessing game API",
+    description="Name Rush basketball initials game API",
     version="1.0.0",
 )
 
@@ -34,4 +34,4 @@ app.include_router(multiplayer_router, prefix="/api")
 
 @app.get("/")
 def root() -> dict[str, str]:
-    return {"message": "NBA Initials Game API", "docs": "/docs"}
+    return {"message": "Name Rush Game API", "docs": "/docs"}

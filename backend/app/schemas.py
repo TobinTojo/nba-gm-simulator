@@ -492,7 +492,7 @@ class CareerStatusResponse(BaseModel):
     phase: str
 
 
-# --- NBA Initials Game ---
+# --- Name Rush Game ---
 
 
 class GameStatusResponse(BaseModel):
@@ -500,7 +500,7 @@ class GameStatusResponse(BaseModel):
     player_count: int
     timer_seconds: int = 30
     mode: str = "all_time"
-    mode_label: str = "All-time NBA"
+    mode_label: str = "All-time basketball"
 
 
 class GameStartRequest(BaseModel):

@@ -8,7 +8,7 @@ export function AboutSection() {
           Initials. Instinct. Instant points.
         </h2>
         <p className="mt-4 max-w-2xl text-base leading-relaxed text-slate-400 sm:text-lg">
-          Name Rush is a fast NBA trivia race: you see two letters, you name a real player from history,
+          Name Rush is a fast basketball trivia race: you see two letters, you name a real player from history,
           and the clock decides how many points you bank. Miss once in solo and the run ends. In friend
           matches, the first correct answer takes the round.
         </p>
@@ -18,7 +18,7 @@ export function AboutSection() {
             <p className="font-display text-3xl text-accent">01</p>
             <h3 className="mt-3 text-lg font-semibold text-white">Know the names</h3>
             <p className="mt-2 text-sm leading-relaxed text-slate-400">
-              Every all-time NBA player is in the pool. Close spelling still counts when the initials match.
+              Every all-time basketball player is in the pool. Close spelling still counts when the initials match.
             </p>
           </article>
           <article>

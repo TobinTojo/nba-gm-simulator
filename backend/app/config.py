@@ -22,16 +22,17 @@ def _parse_cors_origins_extra(value: str) -> list[str]:
 
 
 class Settings(BaseSettings):
-    app_name: str = "NBA Initials"
+    app_name: str = "Name Rush"
     database_url: str = f"sqlite:///{DATA_DIR / 'nba_gm.db'}"
     cors_origins: list[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "https://namerushball.netlify.app",
     ]
     # Comma-separated production frontend URLs, e.g.
-    # https://nba-initials.netlify.app
+    # https://namerushball.netlify.app
     cors_origins_extra: str = ""
-    # Regex for deployed Netlify frontends, e.g. https://nbanamerush.netlify.app
+    # Regex for deployed Netlify frontends, e.g. https://namerushball.netlify.app
     cors_origin_regex: str = r"https://.*\.netlify\.app"
     leaderboard_database_url: str = ""
     supabase_url: str = ""

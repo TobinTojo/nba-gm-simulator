@@ -25,7 +25,7 @@ export function LandingHero({
             <span className="block text-accent">RUSH</span>
           </p>
           <p className="mt-5 max-w-md text-base leading-relaxed text-slate-300 sm:text-lg">
-            Race the clock against every NBA initial in history, solo or with friends.
+            Race the clock against every basketball initial in history, solo or with friends.
           </p>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
