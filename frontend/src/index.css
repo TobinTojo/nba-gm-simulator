@@ -90,20 +90,21 @@
 }
 
 @keyframes ballBounce {
-  0% {
-    transform: translateY(0) rotate(0deg);
-  }
-  35% {
-    transform: translateY(-28px) rotate(110deg);
-  }
-  50% {
-    transform: translateY(0) rotate(160deg);
-  }
-  70% {
-    transform: translateY(-12px) rotate(230deg);
-  }
+  0%,
   100% {
-    transform: translateY(0) rotate(360deg);
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-28px);
+  }
+  55% {
+    transform: translateY(0);
+  }
+  72% {
+    transform: translateY(-12px);
+  }
+  85% {
+    transform: translateY(0);
   }
 }
 

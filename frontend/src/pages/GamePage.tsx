@@ -416,26 +416,23 @@ export function GamePage() {
 
                     <div className="mb-8 text-center">
                       <p className="text-sm uppercase tracking-widest text-slate-500">Initials</p>
-                      <div className="relative mx-auto mt-2 max-w-lg">
-                        <p className="font-display text-7xl tracking-widest text-white sm:text-8xl">
-                          {initials}
-                        </p>
-                        {correctFlash && (
-                          <div className="correct-flash absolute inset-0 flex flex-col items-center justify-center rounded-2xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-6 backdrop-blur-sm">
-                            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-300">
-                              Correct · +{correctFlash.points}
-                            </p>
-                            <p className="mt-2 text-2xl font-semibold text-white sm:text-3xl">
-                              {correctFlash.name}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                      {initialsPlayerCount > 0 && !correctFlash && (
+                      <p className="mt-2 font-display text-7xl tracking-widest text-white sm:text-8xl">
+                        {initials}
+                      </p>
+                      {initialsPlayerCount > 0 && (
                         <p className="mt-3 text-sm text-slate-400">{initialsCountLabel}</p>
                       )}
-                      {message && !correctFlash && (
-                        <p className="mt-3 text-sm text-emerald-400">{message}</p>
+                      {correctFlash ? (
+                        <div className="correct-flash mx-auto mt-5 max-w-md rounded-2xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-300">
+                            Correct · +{correctFlash.points}
+                          </p>
+                          <p className="mt-2 text-xl font-semibold text-white sm:text-2xl">
+                            {correctFlash.name}
+                          </p>
+                        </div>
+                      ) : (
+                        message && <p className="mt-3 text-sm text-emerald-400">{message}</p>
                       )}
                     </div>
 

@@ -515,26 +515,27 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
           </div>
 
           <div className="mb-6 text-center">
-            <div className="relative mx-auto max-w-lg">
-              <p className="mt-2 font-display text-7xl font-bold tracking-widest text-white sm:text-8xl">
-                {room.current_initials}
-              </p>
-              {correctFlash && (
-                <div className="correct-flash absolute inset-0 flex flex-col items-center justify-center rounded-2xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-6 backdrop-blur-sm">
-                  <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-300">Correct</p>
-                  <p className="mt-2 text-2xl font-semibold text-white sm:text-3xl">{correctFlash}</p>
-                </div>
-              )}
-            </div>
-            {room.initials_player_count > 0 && !correctFlash && (
+            <p className="mt-2 font-display text-7xl font-bold tracking-widest text-white sm:text-8xl">
+              {room.current_initials}
+            </p>
+            {room.initials_player_count > 0 && (
               <p className="mt-3 text-sm text-slate-400">
                 {room.initials_player_count === 1
                   ? '1 unused player left for these initials'
                   : `${room.initials_player_count} unused players left for these initials`}
               </p>
             )}
-            <p className="mt-3 text-sm text-emerald-400">{room.last_message}</p>
-            {feedback && !correctFlash && <p className="mt-2 text-sm text-slate-400">{feedback}</p>}
+            {correctFlash ? (
+              <div className="correct-flash mx-auto mt-5 max-w-md rounded-2xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-300">Correct</p>
+                <p className="mt-2 text-xl font-semibold text-white sm:text-2xl">{correctFlash}</p>
+              </div>
+            ) : (
+              <>
+                <p className="mt-3 text-sm text-emerald-400">{room.last_message}</p>
+                {feedback && <p className="mt-2 text-sm text-slate-400">{feedback}</p>}
+              </>
+            )}
             <p className="mt-2 text-xs text-slate-500">
               Passes {room.pass_count}/{room.players.length}
               {room.you_passed ? ' · you passed' : ''}
