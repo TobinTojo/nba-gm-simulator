@@ -74,17 +74,28 @@
     pointer-events: none;
   }
 
-  .ball-float {
-    animation: ballDrift 5.5s ease-in-out infinite;
+  .ball-bounce {
+    animation: ballBounce 0.9s ease-in-out infinite;
+    transform-origin: center bottom;
+    filter: drop-shadow(0 18px 16px rgba(0, 0, 0, 0.35));
   }
 }
 
-@keyframes ballDrift {
+@keyframes ballBounce {
   0%,
   100% {
-    transform: translateY(0);
+    transform: translateY(0) scale(1, 1);
+  }
+  40% {
+    transform: translateY(-36px) scale(1, 1.04);
   }
   50% {
-    transform: translateY(-10px);
+    transform: translateY(0) scale(1.08, 0.9);
+  }
+  65% {
+    transform: translateY(-14px) scale(1, 1.02);
+  }
+  75% {
+    transform: translateY(0) scale(1.04, 0.94);
   }
 }
