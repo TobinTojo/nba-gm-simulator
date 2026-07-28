@@ -4,7 +4,7 @@ interface AnimatedBasketballProps {
   className?: string;
 }
 
-/** Canvas basketball with bounce, spin, and soft court shadow. */
+/** Canvas basketball with classic panel seams, bounce, and spin. */
 export function AnimatedBasketball({ className = '' }: AnimatedBasketballProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -32,6 +32,70 @@ export function AnimatedBasketball({ className = '' }: AnimatedBasketballProps) 
     resize();
     window.addEventListener('resize', resize);
 
+    const drawSeams = (radius: number) => {
+      const line = Math.max(2.5, radius * 0.055);
+      ctx.lineWidth = line;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = 'rgba(28, 16, 8, 0.92)';
+
+      // Vertical + horizontal ribs
+      ctx.beginPath();
+      ctx.moveTo(0, -radius);
+      ctx.lineTo(0, radius);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(-radius, 0);
+      ctx.lineTo(radius, 0);
+      ctx.stroke();
+
+      // Classic basketball curved ribs (top / bottom) — not globe ellipses
+      ctx.beginPath();
+      ctx.moveTo(-radius * 0.92, -radius * 0.28);
+      ctx.bezierCurveTo(
+        -radius * 0.35,
+        radius * 0.12,
+        radius * 0.35,
+        radius * 0.12,
+        radius * 0.92,
+        -radius * 0.28,
+      );
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(-radius * 0.92, radius * 0.28);
+      ctx.bezierCurveTo(
+        -radius * 0.35,
+        -radius * 0.12,
+        radius * 0.35,
+        -radius * 0.12,
+        radius * 0.92,
+        radius * 0.28,
+      );
+      ctx.stroke();
+    };
+
+    const drawPebbleTexture = (radius: number) => {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.clip();
+
+      for (let i = 0; i < 420; i += 1) {
+        const angle = (i * 2.399) % (Math.PI * 2);
+        const dist = Math.sqrt((i % 97) / 97) * radius * 0.96;
+        const x = Math.cos(angle) * dist;
+        const y = Math.sin(angle) * dist;
+        const shade = i % 3 === 0 ? 'rgba(90, 40, 10, 0.14)' : 'rgba(255, 210, 150, 0.08)';
+        ctx.fillStyle = shade;
+        ctx.beginPath();
+        ctx.arc(x, y, radius * 0.012, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    };
+
     const draw = () => {
       if (!running) return;
       frame += 1;
@@ -44,17 +108,17 @@ export function AnimatedBasketball({ className = '' }: AnimatedBasketballProps) 
       const squash = 1 - bounce * 0.08;
       const stretch = 1 + bounce * 0.05;
       const radius = Math.min(w, h) * 0.28;
-      const spin = frame * 0.035;
+      const spin = frame * 0.028;
       const shadowScale = 1.1 - bounce * 0.35;
       const shadowAlpha = 0.22 + bounce * 0.18;
 
       ctx.clearRect(0, 0, w, h);
 
-      // Soft glow behind the ball
+      // Soft warm glow
       const glow = ctx.createRadialGradient(cx, y, radius * 0.2, cx, y, radius * 2.2);
-      glow.addColorStop(0, 'rgba(249, 115, 22, 0.28)');
-      glow.addColorStop(0.55, 'rgba(249, 115, 22, 0.08)');
-      glow.addColorStop(1, 'rgba(249, 115, 22, 0)');
+      glow.addColorStop(0, 'rgba(194, 90, 30, 0.22)');
+      glow.addColorStop(0.55, 'rgba(194, 90, 30, 0.06)');
+      glow.addColorStop(1, 'rgba(194, 90, 30, 0)');
       ctx.fillStyle = glow;
       ctx.beginPath();
       ctx.arc(cx, y, radius * 2.1, 0, Math.PI * 2);
@@ -75,59 +139,60 @@ export function AnimatedBasketball({ className = '' }: AnimatedBasketballProps) 
       ctx.translate(cx, y);
       ctx.scale(stretch, squash);
 
-      const ball = ctx.createRadialGradient(-radius * 0.35, -radius * 0.4, radius * 0.1, 0, 0, radius);
-      ball.addColorStop(0, '#fdba74');
-      ball.addColorStop(0.45, '#f97316');
-      ball.addColorStop(1, '#c2410c');
+      const ball = ctx.createRadialGradient(-radius * 0.3, -radius * 0.35, radius * 0.08, 0, 0, radius);
+      ball.addColorStop(0, '#e8903a');
+      ball.addColorStop(0.35, '#d2691e');
+      ball.addColorStop(0.72, '#b45309');
+      ball.addColorStop(1, '#7c2d12');
       ctx.fillStyle = ball;
       ctx.beginPath();
       ctx.arc(0, 0, radius, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.strokeStyle = 'rgba(10, 15, 20, 0.85)';
-      ctx.lineWidth = Math.max(2, radius * 0.045);
-      ctx.lineCap = 'round';
+      drawPebbleTexture(radius);
 
-      // Seam lines with spin
+      // Soft leather shading (matte, not plastic)
+      const shade = ctx.createRadialGradient(radius * 0.25, radius * 0.35, radius * 0.1, 0, 0, radius);
+      shade.addColorStop(0, 'rgba(0, 0, 0, 0)');
+      shade.addColorStop(0.65, 'rgba(0, 0, 0, 0)');
+      shade.addColorStop(1, 'rgba(40, 15, 5, 0.35)');
+      ctx.fillStyle = shade;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Thin rim so the silhouette reads clearly
+      ctx.strokeStyle = 'rgba(60, 25, 8, 0.55)';
+      ctx.lineWidth = Math.max(1.5, radius * 0.02);
+      ctx.beginPath();
+      ctx.arc(0, 0, radius - 0.5, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Seams clipped to ball, spinning
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(0, 0, radius - 1, 0, Math.PI * 2);
+      ctx.clip();
       ctx.rotate(spin);
-      ctx.beginPath();
-      ctx.moveTo(0, -radius);
-      ctx.lineTo(0, radius);
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.moveTo(-radius, 0);
-      ctx.lineTo(radius, 0);
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.ellipse(0, 0, radius * 0.72, radius * 0.95, 0, 0, Math.PI * 2);
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.ellipse(0, 0, radius * 0.95, radius * 0.72, 0, 0, Math.PI * 2);
-      ctx.stroke();
-
+      drawSeams(radius);
       ctx.restore();
 
-      // Specular highlight
-      ctx.save();
-      ctx.translate(cx, y);
-      ctx.scale(stretch, squash);
+      // Subtle matte highlight (leather, not chrome)
       const shine = ctx.createRadialGradient(
         -radius * 0.35,
         -radius * 0.4,
         0,
         -radius * 0.2,
         -radius * 0.25,
-        radius * 0.55,
+        radius * 0.5,
       );
-      shine.addColorStop(0, 'rgba(255, 255, 255, 0.45)');
-      shine.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      shine.addColorStop(0, 'rgba(255, 236, 210, 0.22)');
+      shine.addColorStop(1, 'rgba(255, 236, 210, 0)');
       ctx.fillStyle = shine;
       ctx.beginPath();
-      ctx.arc(-radius * 0.2, -radius * 0.25, radius * 0.45, 0, Math.PI * 2);
+      ctx.arc(-radius * 0.22, -radius * 0.28, radius * 0.42, 0, Math.PI * 2);
       ctx.fill();
+
       ctx.restore();
 
       raf = window.requestAnimationFrame(draw);
