@@ -73,6 +73,9 @@ export function SiteNav({
         points_earned: 0,
         accuracy: 0,
         avg_points: 0,
+        friendly_games_played: 0,
+        friendly_points_earned: 0,
+        friendly_avg_points: 0,
         rank: null,
         updated_at: null,
       });

@@ -273,6 +273,9 @@ def _empty_profile() -> dict[str, Any]:
         "points_earned": 0,
         "accuracy": 0.0,
         "avg_points": 0.0,
+        "friendly_games_played": 0,
+        "friendly_points_earned": 0,
+        "friendly_avg_points": 0.0,
         "rank": None,
         "updated_at": None,
     }
@@ -283,12 +286,19 @@ def _with_career_rates(profile: dict[str, Any]) -> dict[str, Any]:
     correct = int(profile.get("correct_answers") or 0)
     attempts = int(profile.get("total_attempts") or 0)
     points = int(profile.get("points_earned") or 0)
+    friendly_games = int(profile.get("friendly_games_played") or 0)
+    friendly_points = int(profile.get("friendly_points_earned") or 0)
     profile["games_played"] = games
     profile["correct_answers"] = correct
     profile["total_attempts"] = attempts
     profile["points_earned"] = points
+    profile["friendly_games_played"] = friendly_games
+    profile["friendly_points_earned"] = friendly_points
     profile["accuracy"] = round((correct / attempts) * 100, 1) if attempts > 0 else 0.0
     profile["avg_points"] = round(points / games, 1) if games > 0 else 0.0
+    profile["friendly_avg_points"] = (
+        round(friendly_points / friendly_games, 1) if friendly_games > 0 else 0.0
+    )
     return profile
 
 
@@ -297,7 +307,7 @@ def _profile_via_rest(user_id: str) -> dict[str, Any]:
     headers = _rest_headers()
     select_full = (
         "display_name,high_score,friendly_wins,games_played,correct_answers,"
-        "total_attempts,points_earned,updated_at"
+        "total_attempts,points_earned,friendly_games_played,friendly_points_earned,updated_at"
     )
 
     with httpx.Client(timeout=15.0) as client:
@@ -349,6 +359,8 @@ def _profile_via_rest(user_id: str) -> dict[str, Any]:
             "correct_answers": int(row.get("correct_answers") or 0),
             "total_attempts": int(row.get("total_attempts") or 0),
             "points_earned": int(row.get("points_earned") or 0),
+            "friendly_games_played": int(row.get("friendly_games_played") or 0),
+            "friendly_points_earned": int(row.get("friendly_points_earned") or 0),
             "rank": rank,
             "updated_at": updated_at if isinstance(updated_at, str) else None,
         }
@@ -363,7 +375,8 @@ def _profile_via_postgres(user_id: str) -> dict[str, Any]:
                 cur.execute(
                     """
                     SELECT display_name, high_score, friendly_wins, games_played,
-                           correct_answers, total_attempts, points_earned, updated_at
+                           correct_answers, total_attempts, points_earned,
+                           friendly_games_played, friendly_points_earned, updated_at
                     FROM public.leaderboard
                     WHERE user_id = %s
                     """,
@@ -371,14 +384,26 @@ def _profile_via_postgres(user_id: str) -> dict[str, Any]:
                 )
             except Exception:
                 conn.rollback()
-                cur.execute(
-                    """
-                    SELECT display_name, high_score, friendly_wins, updated_at
-                    FROM public.leaderboard
-                    WHERE user_id = %s
-                    """,
-                    (user_uuid,),
-                )
+                try:
+                    cur.execute(
+                        """
+                        SELECT display_name, high_score, friendly_wins, games_played,
+                               correct_answers, total_attempts, points_earned, updated_at
+                        FROM public.leaderboard
+                        WHERE user_id = %s
+                        """,
+                        (user_uuid,),
+                    )
+                except Exception:
+                    conn.rollback()
+                    cur.execute(
+                        """
+                        SELECT display_name, high_score, friendly_wins, updated_at
+                        FROM public.leaderboard
+                        WHERE user_id = %s
+                        """,
+                        (user_uuid,),
+                    )
             row = cur.fetchone()
             if row is None:
                 return _empty_profile()
@@ -405,6 +430,8 @@ def _profile_via_postgres(user_id: str) -> dict[str, Any]:
             "correct_answers": int(row.get("correct_answers") or 0),
             "total_attempts": int(row.get("total_attempts") or 0),
             "points_earned": int(row.get("points_earned") or 0),
+            "friendly_games_played": int(row.get("friendly_games_played") or 0),
+            "friendly_points_earned": int(row.get("friendly_points_earned") or 0),
             "rank": int(rank_row["rank"]) if rank_row else None,
             "updated_at": updated_at.isoformat() if isinstance(updated_at, datetime) else None,
         }
@@ -600,3 +627,82 @@ def increment_friendly_wins(user_id: str, display_name: str) -> int:
             raise
 
     return _increment_wins_via_postgres(user_id, display_name)
+
+
+def _record_friendly_game_via_rest(user_id: str, display_name: str, score: int) -> None:
+    base = settings.supabase_url.strip().rstrip("/")
+    headers = _rest_headers()
+    score = max(0, score)
+
+    with httpx.Client(timeout=15.0) as client:
+        existing_resp = client.get(
+            f"{base}/rest/v1/leaderboard",
+            params={
+                "user_id": f"eq.{user_id}",
+                "select": "high_score,friendly_wins,friendly_games_played,friendly_points_earned",
+            },
+            headers=headers,
+        )
+        if existing_resp.status_code >= 400:
+            existing_resp = client.get(
+                f"{base}/rest/v1/leaderboard",
+                params={"user_id": f"eq.{user_id}", "select": "high_score,friendly_wins"},
+                headers=headers,
+            )
+        existing_resp.raise_for_status()
+        existing_rows = existing_resp.json()
+        previous = existing_rows[0] if existing_rows else {}
+        payload = {
+            "user_id": user_id,
+            "display_name": display_name[:80],
+            "high_score": int(previous.get("high_score") or 0),
+            "friendly_wins": int(previous.get("friendly_wins") or 0),
+            "friendly_games_played": int(previous.get("friendly_games_played") or 0) + 1,
+            "friendly_points_earned": int(previous.get("friendly_points_earned") or 0) + score,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        upsert_resp = client.post(
+            f"{base}/rest/v1/leaderboard",
+            headers={**headers, "Prefer": "resolution=merge-duplicates,return=representation"},
+            params={"on_conflict": "user_id"},
+            json=payload,
+        )
+        upsert_resp.raise_for_status()
+
+
+def _record_friendly_game_via_postgres(user_id: str, display_name: str, score: int) -> None:
+    user_uuid = UUID(str(user_id))
+    score = max(0, score)
+    with _connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                INSERT INTO public.leaderboard (
+                    user_id, display_name, high_score, friendly_wins,
+                    friendly_games_played, friendly_points_earned, updated_at
+                )
+                VALUES (%s, %s, 0, 0, 1, %s, NOW())
+                ON CONFLICT (user_id) DO UPDATE SET
+                    display_name = EXCLUDED.display_name,
+                    friendly_games_played = public.leaderboard.friendly_games_played + 1,
+                    friendly_points_earned = public.leaderboard.friendly_points_earned + EXCLUDED.friendly_points_earned
+                """,
+                (user_uuid, display_name[:80], score),
+            )
+            conn.commit()
+
+
+def record_friendly_game(user_id: str, display_name: str, score: int) -> None:
+    """Record one finished friendly match for averages (points = rounds won)."""
+    if _rest_configured():
+        try:
+            _record_friendly_game_via_rest(user_id, display_name, score)
+            return
+        except Exception:
+            logger.exception("Friendly career REST update failed for user %s", user_id)
+            if settings.leaderboard_database_url.strip():
+                _record_friendly_game_via_postgres(user_id, display_name, score)
+                return
+            raise
+
+    _record_friendly_game_via_postgres(user_id, display_name, score)

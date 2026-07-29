@@ -113,22 +113,97 @@ def _current_initials(room: MultiplayerRoom) -> str:
 
 
 def _record_friendly_1v1_win(room: MultiplayerRoom, winners: list[RoomPlayer]) -> None:
-    """Persist a sole win when the finished match was exactly 2 players."""
+    """Persist friendly match stats and a sole win when the match was exactly 2 players."""
     if room.friendly_win_recorded:
-        return
-    if len(room.players) != 2 or len(winners) != 1:
         return
 
     try:
-        from app.services.leaderboard_service import increment_friendly_wins, leaderboard_enabled
+        from app.services.leaderboard_service import (
+            increment_friendly_wins,
+            leaderboard_enabled,
+            record_friendly_game,
+        )
 
         if not leaderboard_enabled():
             return
-        increment_friendly_wins(winners[0].player_id, winners[0].display_name)
+
+        for player in room.players:
+            record_friendly_game(player.player_id, player.display_name, player.score)
+
+        if len(room.players) == 2 and len(winners) == 1:
+            increment_friendly_wins(winners[0].player_id, winners[0].display_name)
+
         room.friendly_win_recorded = True
     except Exception:
         # Stats are best-effort; never block match completion.
         pass
+
+
+def leave_room(code: str, player_id: str) -> dict[str, Any]:
+    """Remove a player from the lobby/match and sync for everyone else."""
+    room_code = code.strip().upper()
+    player_id = player_id.strip()
+    if not player_id:
+        raise MultiplayerError("Missing player id.")
+
+    with _lock:
+        _cleanup_expired_locked()
+        room = _rooms.get(room_code)
+        if room is None:
+            raise MultiplayerError("Room not found.", 404)
+
+        player = _find_player(room, player_id)
+        if player is None:
+            _sync_room_timers(room)
+            return serialize_room(room, player_id)
+
+        name = player.display_name
+        room.players = [entry for entry in room.players if entry.player_id != player_id]
+        room.round_passes.discard(player_id)
+        room.updated_at = time.time()
+
+        if not room.players:
+            del _rooms[room_code]
+            return {
+                "code": room_code,
+                "status": "closed",
+                "max_players": MAX_PLAYERS,
+                "total_rounds": room.total_rounds,
+                "era": room.era,
+                "era_label": era_label(room.era),
+                "round_seconds": ROUND_SECONDS,
+                "countdown_seconds": COUNTDOWN_SECONDS,
+                "round_index": room.round_index,
+                "round_number": min(room.round_index + 1, room.total_rounds),
+                "time_left": None,
+                "countdown_left": None,
+                "current_initials": "",
+                "initials_player_count": 0,
+                "players": [],
+                "pass_count": 0,
+                "you_passed": False,
+                "last_message": f"{name} left. Room closed.",
+                "last_winner_id": None,
+                "last_matched_name": "",
+                "winner_ids": [],
+                "you_are_host": False,
+                "in_room": False,
+                "can_start": False,
+            }
+
+        if room.host_id == player_id:
+            room.host_id = room.players[0].player_id
+
+        if room.status in {"playing", "countdown"} and len(room.players) < 2:
+            room.countdown_started_at = None
+            room.round_started_at = None
+            _finish_match(room)
+            room.last_message = f"{name} left. Match ended."
+        else:
+            room.last_message = f"{name} left ({len(room.players)}/{MAX_PLAYERS})."
+            _sync_room_timers(room)
+
+        return serialize_room(room, player_id)
 
 
 def _finish_match(room: MultiplayerRoom) -> None:

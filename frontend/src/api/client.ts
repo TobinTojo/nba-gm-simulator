@@ -116,6 +116,12 @@ export const api = {
       headers: { Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify({ code }),
     }),
+  leaveMultiplayerRoom: (code: string, accessToken: string) =>
+    request<MultiplayerRoomResponse>('/multiplayer/leave', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ code }),
+    }),
   getMultiplayerRoom: (code: string, accessToken: string) =>
     request<MultiplayerRoomResponse>(`/multiplayer/room/${encodeURIComponent(code)}`, {
       headers: { Authorization: `Bearer ${accessToken}` },

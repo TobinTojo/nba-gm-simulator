@@ -31,6 +31,25 @@ def _leaderboard_unavailable() -> HTTPException:
     return HTTPException(status_code=503, detail="Leaderboard is not configured yet.")
 
 
+def _profile_response(profile: dict, display_name: str) -> ProfileResponse:
+    return ProfileResponse(
+        display_name=str(profile.get("display_name") or display_name),
+        high_score=int(profile.get("high_score") or 0),
+        friendly_wins=int(profile.get("friendly_wins") or 0),
+        games_played=int(profile.get("games_played") or 0),
+        correct_answers=int(profile.get("correct_answers") or 0),
+        total_attempts=int(profile.get("total_attempts") or 0),
+        points_earned=int(profile.get("points_earned") or 0),
+        accuracy=float(profile.get("accuracy") or 0),
+        avg_points=float(profile.get("avg_points") or 0),
+        friendly_games_played=int(profile.get("friendly_games_played") or 0),
+        friendly_points_earned=int(profile.get("friendly_points_earned") or 0),
+        friendly_avg_points=float(profile.get("friendly_avg_points") or 0),
+        rank=profile.get("rank"),
+        updated_at=profile.get("updated_at"),
+    )
+
+
 @router.get("/leaderboard", response_model=LeaderboardResponse)
 def leaderboard_list(
     limit: int = Query(default=25, ge=1, le=100),
@@ -102,19 +121,7 @@ def leaderboard_me(
         logger.exception("Profile read failed for user %s", claims.get("sub"))
         raise HTTPException(status_code=500, detail="Could not load profile.") from exc
 
-    return ProfileResponse(
-        display_name=str(profile.get("display_name") or display_name),
-        high_score=int(profile.get("high_score") or 0),
-        friendly_wins=int(profile.get("friendly_wins") or 0),
-        games_played=int(profile.get("games_played") or 0),
-        correct_answers=int(profile.get("correct_answers") or 0),
-        total_attempts=int(profile.get("total_attempts") or 0),
-        points_earned=int(profile.get("points_earned") or 0),
-        accuracy=float(profile.get("accuracy") or 0),
-        avg_points=float(profile.get("avg_points") or 0),
-        rank=profile.get("rank"),
-        updated_at=profile.get("updated_at"),
-    )
+    return _profile_response(profile, display_name)
 
 
 @router.post("/leaderboard/career", response_model=ProfileResponse)
@@ -142,16 +149,4 @@ def leaderboard_career(
         logger.exception("Career record failed for user %s", claims.get("sub"))
         raise HTTPException(status_code=500, detail="Could not save career stats.") from exc
 
-    return ProfileResponse(
-        display_name=str(profile.get("display_name") or display_name),
-        high_score=int(profile.get("high_score") or 0),
-        friendly_wins=int(profile.get("friendly_wins") or 0),
-        games_played=int(profile.get("games_played") or 0),
-        correct_answers=int(profile.get("correct_answers") or 0),
-        total_attempts=int(profile.get("total_attempts") or 0),
-        points_earned=int(profile.get("points_earned") or 0),
-        accuracy=float(profile.get("accuracy") or 0),
-        avg_points=float(profile.get("avg_points") or 0),
-        rank=profile.get("rank"),
-        updated_at=profile.get("updated_at"),
-    )
+    return _profile_response(profile, display_name)

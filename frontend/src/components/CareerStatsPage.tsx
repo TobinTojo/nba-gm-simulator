@@ -59,7 +59,7 @@ export function CareerStatsPage({
       <div className="animate-slide-up">
         <p className="text-xs font-semibold uppercase tracking-[0.35em] text-accent">Career</p>
         <h1 className="mt-2 font-display text-5xl tracking-wide text-fg">Your Stats</h1>
-        <p className="mt-3 text-slate-400">Solo run history tied to your Google account.</p>
+        <p className="mt-3 text-slate-400">Solo and friendly averages tied to your Google account.</p>
       </div>
 
       <section className="card mt-8 p-6 sm:p-8 animate-slide-up">
@@ -108,13 +108,19 @@ export function CareerStatsPage({
               </div>
             </div>
 
-            <div className="mt-8 grid gap-4 sm:grid-cols-2">
+            <p className="mt-8 text-[10px] uppercase tracking-[0.22em] text-slate-500">Solo</p>
+            <div className="mt-3 grid gap-4 sm:grid-cols-2">
               <StatCard label="Games played" value={String(profile?.games_played ?? 0)} />
               <StatCard label="Accuracy" value={`${profile?.accuracy ?? 0}%`} accent />
               <StatCard label="Avg points" value={String(profile?.avg_points ?? 0)} />
               <StatCard label="Best score" value={String(profile?.high_score ?? 0)} />
-              <StatCard label="Friendly 1v1 wins" value={String(profile?.friendly_wins ?? 0)} />
-              <StatCard label="Total points" value={String(profile?.points_earned ?? 0)} />
+            </div>
+
+            <p className="mt-8 text-[10px] uppercase tracking-[0.22em] text-slate-500">Friendly</p>
+            <div className="mt-3 grid gap-4 sm:grid-cols-2">
+              <StatCard label="Games played" value={String(profile?.friendly_games_played ?? 0)} />
+              <StatCard label="Avg points" value={String(profile?.friendly_avg_points ?? 0)} />
+              <StatCard label="1v1 wins" value={String(profile?.friendly_wins ?? 0)} accent />
             </div>
           </>
         )}

@@ -587,6 +587,9 @@ class ProfileResponse(BaseModel):
     points_earned: int = 0
     accuracy: float = 0.0
     avg_points: float = 0.0
+    friendly_games_played: int = 0
+    friendly_points_earned: int = 0
+    friendly_avg_points: float = 0.0
     rank: int | None = None
     updated_at: str | None = None
 
@@ -627,6 +630,10 @@ class MultiplayerStartRequest(BaseModel):
 
 
 class MultiplayerRematchRequest(BaseModel):
+    code: str = Field(min_length=4, max_length=8)
+
+
+class MultiplayerLeaveRequest(BaseModel):
     code: str = Field(min_length=4, max_length=8)
 
 

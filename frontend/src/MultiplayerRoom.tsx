@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '@/api/client';
+import { MatchPodium } from '@/components/MatchPodium';
+import { ServerLoadingScreen } from '@/components/ServerLoadingScreen';
 import { useSettings } from '@/context/SettingsContext';
 import { useLeaderboardAuth } from '@/hooks/useLeaderboardAuth';
 import { playSfx } from '@/lib/sounds';
@@ -34,6 +36,7 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
   const [feedback, setFeedback] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [serverWaking, setServerWaking] = useState(false);
   const [copied, setCopied] = useState(false);
   const [displayTime, setDisplayTime] = useState(30);
   const [displayCountdown, setDisplayCountdown] = useState(3);
@@ -42,9 +45,14 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
   const inputRef = useRef<HTMLInputElement>(null);
   const lastCountdownRef = useRef<number | null>(null);
   const startedSoundRef = useRef(false);
+  const roomCodeRef = useRef<string | null>(null);
+  const accessTokenRef = useRef<string | undefined>(undefined);
+  const leavingRef = useRef(false);
 
   const accessToken = session?.access_token;
   const playerId = user?.id ?? '';
+  roomCodeRef.current = room?.code ?? null;
+  accessTokenRef.current = accessToken;
   const displayName =
     user?.user_metadata?.full_name ??
     user?.user_metadata?.name ??
@@ -60,14 +68,27 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
     const interval = window.setInterval(() => {
       void api
         .getMultiplayerRoom(room.code, accessToken)
-        .then((next) => setRoom(next))
-        .catch(() => {
-          /* keep last known room state while polling */
+        .then((next) => {
+          if (!next.in_room || next.status === 'closed') {
+            leavingRef.current = true;
+            setRoom(null);
+            onExit();
+            return;
+          }
+          setRoom(next);
+        })
+        .catch((err: unknown) => {
+          const message = err instanceof Error ? err.message : '';
+          if (message.toLowerCase().includes('not found')) {
+            leavingRef.current = true;
+            setRoom(null);
+            onExit();
+          }
         });
     }, intervalMs);
 
     return () => window.clearInterval(interval);
-  }, [room?.code, room?.status, accessToken, correctFlash]);
+  }, [room?.code, room?.status, accessToken, correctFlash, onExit]);
 
   const finishedNotifiedRef = useRef(false);
 
@@ -148,10 +169,43 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
     return () => window.clearInterval(interval);
   }, [room?.status, room?.countdown_left, room?.countdown_seconds]);
 
+  useEffect(() => {
+    const onUnload = () => {
+      const code = roomCodeRef.current;
+      const token = accessTokenRef.current;
+      if (!code || !token || leavingRef.current) return;
+      leavingRef.current = true;
+      void fetch(`${import.meta.env.VITE_API_URL ?? '/api'}/multiplayer/leave`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ code }),
+        keepalive: true,
+      });
+    };
+
+    window.addEventListener('pagehide', onUnload);
+    window.addEventListener('beforeunload', onUnload);
+    return () => {
+      window.removeEventListener('pagehide', onUnload);
+      window.removeEventListener('beforeunload', onUnload);
+      const code = roomCodeRef.current;
+      const token = accessTokenRef.current;
+      if (code && token && !leavingRef.current) {
+        leavingRef.current = true;
+        void api.leaveMultiplayerRoom(code, token).catch(() => undefined);
+      }
+    };
+  }, []);
+
   async function handleCreate() {
     if (!accessToken) return;
     setBusy(true);
+    setServerWaking(false);
     setError(null);
+    const wakeTimer = window.setTimeout(() => setServerWaking(true), 2500);
     try {
       const created = await api.createMultiplayerRoom(accessToken, selectedRounds, selectedEra);
       setRoom(created);
@@ -159,6 +213,8 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create room.');
     } finally {
+      window.clearTimeout(wakeTimer);
+      setServerWaking(false);
       setBusy(false);
     }
   }
@@ -170,7 +226,9 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
       return;
     }
     setBusy(true);
+    setServerWaking(false);
     setError(null);
+    const wakeTimer = window.setTimeout(() => setServerWaking(true), 2500);
     try {
       const joined = await api.joinMultiplayerRoom(joinCode.trim().toUpperCase(), accessToken);
       setRoom(joined);
@@ -178,6 +236,8 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not join room.');
     } finally {
+      window.clearTimeout(wakeTimer);
+      setServerWaking(false);
       setBusy(false);
     }
   }
@@ -300,6 +360,21 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
     }
   }
 
+  async function handleLeave() {
+    const code = roomCodeRef.current;
+    const token = accessTokenRef.current;
+    if (code && token && !leavingRef.current) {
+      leavingRef.current = true;
+      try {
+        await api.leaveMultiplayerRoom(code, token);
+      } catch {
+        /* still exit locally */
+      }
+    }
+    setRoom(null);
+    onExit();
+  }
+
   if (!enabled) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center text-center">
@@ -338,6 +413,19 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
   }
 
   if (!room) {
+    if (busy) {
+      return (
+        <ServerLoadingScreen
+          title={serverWaking ? 'Waking up the server' : 'Connecting to lobby'}
+          detail={
+            serverWaking
+              ? 'Render is starting cold. Hang tight - this can take up to a minute the first time.'
+              : 'Talking to the multiplayer service...'
+          }
+        />
+      );
+    }
+
     return (
       <div className="flex flex-1 flex-col items-center justify-center text-center">
         <p className="text-sm uppercase tracking-wider text-accent">Multiplayer</p>
@@ -451,7 +539,7 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
             {room.era_label} · {room.total_rounds} rounds
           </p>
         </div>
-        <button type="button" onClick={onExit} className="btn-leave">
+        <button type="button" onClick={() => void handleLeave()} className="btn-leave">
           Leave
         </button>
       </div>
@@ -688,45 +776,9 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
             </>
           )}
 
-          <div
-            className={`mt-8 w-full max-w-sm space-y-2 rounded-2xl border p-5 ${
-              youWon
-                ? 'border-accent/50 bg-accent/10'
-                : 'border-court-700 bg-court-900/50'
-            }`}
-          >
-            {[...room.players]
-              .sort((a, b) => b.score - a.score)
-              .map((player, index) => (
-                <p
-                  key={player.player_id}
-                  className={`flex items-center justify-between gap-3 text-sm ${
-                    player.is_you ? 'font-semibold text-white' : 'text-slate-300'
-                  }`}
-                >
-                  <span className="flex min-w-0 items-center gap-2">
-                    {player.avatar_url ? (
-                      <img
-                        src={player.avatar_url}
-                        alt=""
-                        className="h-7 w-7 rounded-full border border-accent/60 object-cover"
-                      />
-                    ) : (
-                      <span className="flex h-7 w-7 items-center justify-center rounded-full border border-accent/40 bg-accent/10 text-[10px] text-accent">
-                        {player.display_name.slice(0, 1).toUpperCase()}
-                      </span>
-                    )}
-                    <span className="truncate">
-                      #{index + 1} {player.display_name}
-                      {player.is_you ? ' (you)' : ''}
-                    </span>
-                  </span>
-                  <span className="shrink-0 tabular-nums">{player.score}</span>
-                </p>
-              ))}
-          </div>
+          <MatchPodium players={room.players} />
 
-          <p className="mt-4 text-sm text-slate-400">{room.last_message}</p>
+          <p className="mt-6 text-sm text-slate-400">{room.last_message}</p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             {room.you_are_host ? (
               <button
@@ -740,7 +792,7 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
             ) : (
               <p className="w-full text-sm text-slate-500">Waiting for host to rematch...</p>
             )}
-            <button type="button" onClick={onExit} className="btn-ghost px-8 py-3">
+            <button type="button" onClick={() => void handleLeave()} className="btn-ghost px-8 py-3">
               Back to menu
             </button>
           </div>

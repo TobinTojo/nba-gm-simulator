@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/api/client';
 import { AboutSection } from '@/components/AboutSection';
 import { CareerStatsPage } from '@/components/CareerStatsPage';
+import { CreditsSection } from '@/components/CreditsSection';
 import { LandingHero } from '@/components/LandingHero';
 import { LeaveGameModal } from '@/components/LeaveGameModal';
+import { ServerLoadingScreen } from '@/components/ServerLoadingScreen';
 import { SettingsPage } from '@/components/SettingsPage';
 import { SiteNav } from '@/components/SiteNav';
 import { useSettings } from '@/context/SettingsContext';
@@ -46,6 +48,7 @@ export function GamePage() {
   const [message, setMessage] = useState('');
   const [playerCount, setPlayerCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [serverWaking, setServerWaking] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [timerGeneration, setTimerGeneration] = useState(0);
@@ -258,6 +261,10 @@ export function GamePage() {
   async function handleStart() {
     setError(null);
     setLoading(true);
+    setServerWaking(false);
+    setMode('solo');
+    setPhase('idle');
+    const wakeTimer = window.setTimeout(() => setServerWaking(true), 2500);
     try {
       const status = await api.getGameStatus();
       setPlayerCount(status.player_count);
@@ -278,12 +285,15 @@ export function GamePage() {
       setWrongFlash(null);
       submittedScoreRef.current = null;
       setTimerGeneration((n) => n + 1);
-      setMode('solo');
       setPhase('playing');
       playSfx('start', soundEnabled);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start game');
+      setMode('home');
+      setPhase('idle');
     } finally {
+      window.clearTimeout(wakeTimer);
+      setServerWaking(false);
       setLoading(false);
     }
   }
@@ -516,6 +526,7 @@ export function GamePage() {
             onPlayFriends={() => setMode('versus')}
           />
           <AboutSection />
+          <CreditsSection />
           {leaderboardEnabled && (
             <section className="border-t border-white/5 py-16">
               <div className="mx-auto max-w-6xl px-4 sm:px-6">
@@ -538,6 +549,15 @@ export function GamePage() {
           )}
           <footer className="border-t border-white/5 py-8 text-center text-xs text-slate-600">
             Faster answers = more points · Up to {timerSeconds} pts per correct guess
+            <span className="mx-2 text-slate-700">·</span>
+            <a
+              href="https://tobintojo.netlify.app/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-slate-500 underline decoration-accent/40 underline-offset-2 transition hover:text-accent"
+            >
+              Tobin Tojo
+            </a>
           </footer>
         </>
       ) : (
@@ -549,7 +569,14 @@ export function GamePage() {
                 onMatchFinished={() => setProfileRefreshKey((value) => value + 1)}
               />
             ) : loading && phase === 'idle' ? (
-              <p className="text-center text-slate-400">Loading players...</p>
+              <ServerLoadingScreen
+                title={serverWaking ? 'Waking up the server' : 'Starting solo'}
+                detail={
+                  serverWaking
+                    ? 'Render is starting cold. Hang tight - this can take up to a minute the first time.'
+                    : 'Loading the player pool and dealing your first initials...'
+                }
+              />
             ) : (
               <>
                 {phase === 'playing' && (

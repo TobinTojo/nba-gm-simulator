@@ -6,6 +6,7 @@ from app.schemas import (
     MultiplayerCreateRequest,
     MultiplayerGuessRequest,
     MultiplayerJoinRequest,
+    MultiplayerLeaveRequest,
     MultiplayerPassRequest,
     MultiplayerRematchRequest,
     MultiplayerRoomResponse,
@@ -22,6 +23,7 @@ from app.services.multiplayer_service import (
     create_room,
     get_room,
     join_room,
+    leave_room,
     rematch,
     set_settings,
     start_match,
@@ -112,6 +114,19 @@ def multiplayer_rematch(
     claims = require_auth_user(authorization)
     try:
         room = rematch(payload.code, str(claims["sub"]))
+    except MultiplayerError as exc:
+        _raise(exc)
+    return MultiplayerRoomResponse(**room)
+
+
+@router.post("/multiplayer/leave", response_model=MultiplayerRoomResponse)
+def multiplayer_leave(
+    payload: MultiplayerLeaveRequest,
+    authorization: str | None = Header(default=None),
+) -> MultiplayerRoomResponse:
+    claims = require_auth_user(authorization)
+    try:
+        room = leave_room(payload.code, str(claims["sub"]))
     except MultiplayerError as exc:
         _raise(exc)
     return MultiplayerRoomResponse(**room)

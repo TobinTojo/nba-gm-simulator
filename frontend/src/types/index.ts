@@ -96,6 +96,9 @@ export interface ProfileResponse {
   points_earned: number;
   accuracy: number;
   avg_points: number;
+  friendly_games_played: number;
+  friendly_points_earned: number;
+  friendly_avg_points: number;
   rank: number | null;
   updated_at: string | null;
 }
