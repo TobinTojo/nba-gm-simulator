@@ -10,6 +10,7 @@ import { SettingsPage } from '@/components/SettingsPage';
 import { SiteNav } from '@/components/SiteNav';
 import { useSettings } from '@/context/SettingsContext';
 import { useLeaderboardAuth } from '@/hooks/useLeaderboardAuth';
+import { ERA_OPTIONS, eraLabel, type EraValue } from '@/lib/eras';
 import { playSfx } from '@/lib/sounds';
 import { LeaderboardPanel } from '@/LeaderboardPanel';
 import { MultiplayerRoom } from '@/MultiplayerRoom';
@@ -59,6 +60,7 @@ export function GamePage() {
   const [correctFlash, setCorrectFlash] = useState<{ name: string; points: number } | null>(null);
   const [wrongFlash, setWrongFlash] = useState<string | null>(null);
   const [leaveOpen, setLeaveOpen] = useState(false);
+  const [soloEra, setSoloEra] = useState<EraValue>('all_time');
   const pendingLeaveAction = useRef<(() => void) | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -69,6 +71,7 @@ export function GamePage() {
   const guessRef = useRef(guess);
   const sessionRoundsRef = useRef(sessionRounds);
   const submittedScoreRef = useRef<number | null>(null);
+  const soloEraRef = useRef<EraValue>(soloEra);
 
   useEffect(() => {
     phaseRef.current = phase;
@@ -95,6 +98,10 @@ export function GamePage() {
   }, [sessionRounds]);
 
   useEffect(() => {
+    soloEraRef.current = soloEra;
+  }, [soloEra]);
+
+  useEffect(() => {
     if (submitNotice) {
       setLeaderboardRefreshKey((value) => value + 1);
       setProfileRefreshKey((value) => value + 1);
@@ -113,14 +120,14 @@ export function GamePage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const loadReveals = useCallback(async (rounds: SessionRound[]) => {
+  const loadReveals = useCallback(async (rounds: SessionRound[], era: string) => {
     const initialsList = [...new Set(rounds.map((round) => round.initials))];
     if (initialsList.length === 0) {
       setReveals([]);
       return;
     }
     try {
-      const response = await api.revealInitials(initialsList);
+      const response = await api.revealInitials(initialsList, era);
       setReveals(response.reveals);
     } catch {
       setReveals([]);
@@ -137,7 +144,7 @@ export function GamePage() {
       setCorrectFlash(null);
       setWrongFlash(null);
       submittedScoreRef.current = null;
-      await loadReveals(allRounds);
+      await loadReveals(allRounds, soloEraRef.current);
     },
     [loadReveals],
   );
@@ -160,7 +167,7 @@ export function GamePage() {
     const attempts = Math.max(rounds.length, 1);
 
     void api
-      .recordCareerGame(score, correct, attempts, session.access_token)
+      .recordCareerGame(score, correct, attempts, session.access_token, soloEraRef.current)
       .then((profile) => {
         if (score > 0 && profile.high_score === score) {
           setLeaderboardMessage(
@@ -258,6 +265,14 @@ export function GamePage() {
     }
   }, [phase, initials]);
 
+  function openSoloSetup() {
+    setMode('solo');
+    setPhase('idle');
+    setError(null);
+    setLoading(false);
+    setServerWaking(false);
+  }
+
   async function handleStart() {
     setError(null);
     setLoading(true);
@@ -266,10 +281,10 @@ export function GamePage() {
     setPhase('idle');
     const wakeTimer = window.setTimeout(() => setServerWaking(true), 2500);
     try {
-      const status = await api.getGameStatus();
+      const status = await api.getGameStatus(soloEra);
       setPlayerCount(status.player_count);
       setTimerSeconds(status.timer_seconds);
-      const start = await api.startGame();
+      const start = await api.startGame(soloEra);
       setInitials(start.initials);
       setInitialsPlayerCount(start.initials_player_count);
       setGuess('');
@@ -289,7 +304,6 @@ export function GamePage() {
       playSfx('start', soundEnabled);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start game');
-      setMode('home');
       setPhase('idle');
     } finally {
       window.clearTimeout(wakeTimer);
@@ -307,7 +321,13 @@ export function GamePage() {
     const submittedTimeLeft = timeLeftRef.current;
     const timeSpent = timerSeconds - submittedTimeLeft;
     try {
-      const result = await api.submitGuess(initials, guess.trim(), usedPlayerIds, submittedTimeLeft);
+      const result = await api.submitGuess(
+        initials,
+        guess.trim(),
+        usedPlayerIds,
+        submittedTimeLeft,
+        soloEra,
+      );
 
       if (!result.correct || result.game_over) {
         playSfx('wrong', soundEnabled);
@@ -419,7 +439,13 @@ export function GamePage() {
       const correct = allRounds.filter((round) => round.success).length;
       const attempts = Math.max(allRounds.length, 1);
       try {
-        await api.recordCareerGame(score, correct, attempts, session.access_token);
+        await api.recordCareerGame(
+          score,
+          correct,
+          attempts,
+          session.access_token,
+          soloEraRef.current,
+        );
         setLeaderboardRefreshKey((value) => value + 1);
         setProfileRefreshKey((value) => value + 1);
         submittedScoreRef.current = score > 0 ? score : -1;
@@ -464,7 +490,7 @@ export function GamePage() {
         onGoHome={() => requestNavigation(goHome)}
         onPlaySolo={() =>
           requestNavigation(() => {
-            void handleStart();
+            openSoloSetup();
           })
         }
         onPlayFriends={() =>
@@ -528,7 +554,7 @@ export function GamePage() {
           <LandingHero
             playerCount={playerCount}
             timerSeconds={timerSeconds}
-            onPlaySolo={() => void handleStart()}
+            onPlaySolo={openSoloSetup}
             onPlayFriends={() => setMode('versus')}
             onPlayAnyone={() => setMode('public')}
           />
@@ -587,6 +613,49 @@ export function GamePage() {
               />
             ) : (
               <>
+                {phase === 'idle' && (
+                  <div className="flex flex-1 flex-col items-center justify-center text-center">
+                    <p className="text-xs font-semibold uppercase tracking-[0.35em] text-accent">
+                      Solo
+                    </p>
+                    <h1 className="mt-2 font-display text-4xl tracking-wide text-fg sm:text-5xl">
+                      Pick your era
+                    </h1>
+                    <p className="mt-3 max-w-md text-sm text-slate-400">
+                      Race the clock naming players from the era you choose. Stats are tracked
+                      separately for each era.
+                    </p>
+
+                    <label className="mt-8 w-full max-w-sm text-left">
+                      <span className="mb-2 block text-xs uppercase tracking-wider text-slate-500">
+                        Era
+                      </span>
+                      <select
+                        value={soloEra}
+                        onChange={(e) => setSoloEra(e.target.value as EraValue)}
+                        className="w-full rounded-xl border border-court-600 bg-court-900 px-4 py-3 text-white focus:border-accent focus:outline-none"
+                      >
+                        {ERA_OPTIONS.map((era) => (
+                          <option key={era.value} value={era.value}>
+                            {era.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => void handleStart()}
+                      className="btn-primary mt-6 w-full max-w-sm py-3 text-lg"
+                    >
+                      Start Solo
+                    </button>
+                    <button type="button" onClick={goHome} className="btn-ghost mt-3 px-6 py-3">
+                      Back to home
+                    </button>
+                  </div>
+                )}
+
                 {phase === 'playing' && (
                   <>
                     <div className="mb-8 flex items-center justify-between gap-4">
@@ -609,6 +678,10 @@ export function GamePage() {
                         </p>
                       </div>
                     </div>
+
+                    <p className="-mt-4 mb-6 text-center text-xs uppercase tracking-[0.22em] text-slate-500">
+                      {eraLabel(soloEra)}
+                    </p>
 
                     <div className="mb-8 h-2 overflow-hidden rounded-full bg-court-800">
                       <div
@@ -683,6 +756,9 @@ export function GamePage() {
                       <p className="mt-2 text-2xl font-bold text-white">{message}</p>
                       <p className="mt-4 font-display text-5xl text-accent">{score} pts</p>
                       <p className="mt-1 text-slate-400">{streak} correct in a row</p>
+                      <p className="mt-2 text-xs uppercase tracking-[0.22em] text-slate-500">
+                        {eraLabel(soloEra)}
+                      </p>
 
                       {leaderboardEnabled && (
                         <div className="mt-6 w-full max-w-md text-left">

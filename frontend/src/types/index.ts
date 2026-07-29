@@ -11,6 +11,8 @@ export interface GameStatusResponse {
   timer_seconds: number;
   mode: PlayerPoolMode;
   mode_label: string;
+  era?: string;
+  era_label?: string;
 }
 
 export type PlayerPoolMode = 'all_time' | 'current';
@@ -18,6 +20,8 @@ export type PlayerPoolMode = 'all_time' | 'current';
 export interface GameStartResponse {
   initials: string;
   initials_player_count: number;
+  era?: string;
+  era_label?: string;
 }
 
 export interface GameGuessResponse {
@@ -99,8 +103,21 @@ export interface ProfileResponse {
   friendly_games_played: number;
   friendly_points_earned: number;
   friendly_avg_points: number;
+  era_stats?: EraStatEntry[];
   rank: number | null;
   updated_at: string | null;
+}
+
+export interface EraStatEntry {
+  era: string;
+  era_label: string;
+  games_played: number;
+  correct_answers: number;
+  total_attempts: number;
+  points_earned: number;
+  high_score: number;
+  accuracy: number;
+  avg_points: number;
 }
 
 export interface MultiplayerPlayerState {

@@ -29,13 +29,20 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 export const api = {
   health: () => request<HealthResponse>('/health?mode=all_time'),
-  getGameStatus: () => request<GameStatusResponse>('/game/status?mode=all_time'),
-  startGame: () =>
+  getGameStatus: (era = 'all_time') =>
+    request<GameStatusResponse>(`/game/status?mode=all_time&era=${encodeURIComponent(era)}`),
+  startGame: (era = 'all_time') =>
     request<GameStartResponse>('/game/start', {
       method: 'POST',
-      body: JSON.stringify({ mode: 'all_time' }),
+      body: JSON.stringify({ mode: 'all_time', era }),
     }),
-  submitGuess: (initials: string, guess: string, usedPlayerIds: number[], timeRemaining = 0) =>
+  submitGuess: (
+    initials: string,
+    guess: string,
+    usedPlayerIds: number[],
+    timeRemaining = 0,
+    era = 'all_time',
+  ) =>
     request<GameGuessResponse>('/game/guess', {
       method: 'POST',
       body: JSON.stringify({
@@ -43,15 +50,17 @@ export const api = {
         guess,
         used_player_ids: usedPlayerIds,
         mode: 'all_time',
+        era,
         time_remaining: timeRemaining,
       }),
     }),
-  revealInitials: (initialsList: string[]) =>
+  revealInitials: (initialsList: string[], era = 'all_time') =>
     request<InitialsRevealResponse>('/game/reveal', {
       method: 'POST',
       body: JSON.stringify({
         initials_list: initialsList,
         mode: 'all_time',
+        era,
       }),
     }),
   getLeaderboard: (limit = 25, accessToken?: string) =>
@@ -73,11 +82,12 @@ export const api = {
     correct: number,
     attempts: number,
     accessToken: string,
+    era = 'all_time',
   ) =>
     request<ProfileResponse>('/leaderboard/career', {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
-      body: JSON.stringify({ score, correct, attempts }),
+      body: JSON.stringify({ score, correct, attempts, era }),
     }),
   createMultiplayerRoom: (
     accessToken: string,

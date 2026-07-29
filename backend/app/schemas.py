@@ -501,15 +501,20 @@ class GameStatusResponse(BaseModel):
     timer_seconds: int = 30
     mode: str = "all_time"
     mode_label: str = "All-time basketball"
+    era: str = "all_time"
+    era_label: str = "All-time"
 
 
 class GameStartRequest(BaseModel):
     mode: str = "all_time"
+    era: str = "all_time"
 
 
 class GameStartResponse(BaseModel):
     initials: str
     initials_player_count: int = 0
+    era: str = "all_time"
+    era_label: str = "All-time"
 
 
 class GameGuessRequest(BaseModel):
@@ -517,6 +522,7 @@ class GameGuessRequest(BaseModel):
     guess: str = Field(min_length=2, max_length=80)
     used_player_ids: list[int] = Field(default_factory=list)
     mode: str = "all_time"
+    era: str = "all_time"
     time_remaining: int = Field(default=0, ge=0, le=60)
 
 
@@ -535,6 +541,7 @@ class GameGuessResponse(BaseModel):
 class InitialsRevealRequest(BaseModel):
     initials_list: list[str] = Field(default_factory=list, min_length=1, max_length=50)
     mode: str = "all_time"
+    era: str = "all_time"
 
 
 class RevealPlayerEntry(BaseModel):
@@ -577,6 +584,18 @@ class SubmitScoreResponse(BaseModel):
     rank: int | None = None
 
 
+class EraStatEntry(BaseModel):
+    era: str
+    era_label: str
+    games_played: int = 0
+    correct_answers: int = 0
+    total_attempts: int = 0
+    points_earned: int = 0
+    high_score: int = 0
+    accuracy: float = 0.0
+    avg_points: float = 0.0
+
+
 class ProfileResponse(BaseModel):
     display_name: str = ""
     high_score: int = 0
@@ -590,6 +609,7 @@ class ProfileResponse(BaseModel):
     friendly_games_played: int = 0
     friendly_points_earned: int = 0
     friendly_avg_points: float = 0.0
+    era_stats: list[EraStatEntry] = Field(default_factory=list)
     rank: int | None = None
     updated_at: str | None = None
 
@@ -598,6 +618,7 @@ class CareerGameRequest(BaseModel):
     score: int = Field(ge=0, le=100000)
     correct: int = Field(ge=0, le=100000)
     attempts: int = Field(ge=0, le=100000)
+    era: str = "all_time"
 
 
 class MultiplayerPlayerState(BaseModel):

@@ -26,8 +26,11 @@ router = APIRouter()
 
 
 @router.get("/health", response_model=HealthResponse)
-def health_check(mode: str = Query(default="all_time")) -> HealthResponse:
-    status = get_game_status(mode)
+def health_check(
+    mode: str = Query(default="all_time"),
+    era: str = Query(default="all_time"),
+) -> HealthResponse:
+    status = get_game_status(mode, era)
     return HealthResponse(
         status="ok",
         app="Name Rush",
@@ -37,11 +40,14 @@ def health_check(mode: str = Query(default="all_time")) -> HealthResponse:
 
 
 @router.get("/game/status", response_model=GameStatusResponse)
-def game_status(mode: str = Query(default="all_time")) -> GameStatusResponse:
-    status = get_game_status(mode)
+def game_status(
+    mode: str = Query(default="all_time"),
+    era: str = Query(default="all_time"),
+) -> GameStatusResponse:
+    status = get_game_status(mode, era)
     if int(status["player_count"]) == 0:
         count = refresh_player_pool(mode)
-        status = get_game_status(mode)
+        status = get_game_status(mode, era)
         status["player_count"] = count
     return GameStatusResponse(
         season=str(status["season"]),
@@ -49,25 +55,33 @@ def game_status(mode: str = Query(default="all_time")) -> GameStatusResponse:
         timer_seconds=int(status["timer_seconds"]),
         mode=str(status["mode"]),
         mode_label=str(status["mode_label"]),
+        era=str(status.get("era") or "all_time"),
+        era_label=str(status.get("era_label") or "All-time"),
     )
 
 
 @router.post("/game/start", response_model=GameStartResponse)
 def game_start(payload: GameStartRequest | None = None) -> GameStartResponse:
     mode = payload.mode if payload else "all_time"
-    if get_game_status(mode)["player_count"] == 0:
+    era = payload.era if payload else "all_time"
+    if get_game_status(mode, era)["player_count"] == 0:
         refresh_player_pool(mode)
-    if get_game_status(mode)["player_count"] == 0:
+    if get_game_status(mode, era)["player_count"] == 0:
         detail = (
             "Could not load all-time basketball players."
             if mode == "all_time"
             else "Could not load current basketball players."
         )
         raise HTTPException(status_code=503, detail=detail)
-    round_payload = start_round([], mode)
+    try:
+        round_payload = start_round([], mode, era)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return GameStartResponse(
         initials=str(round_payload["initials"]),
         initials_player_count=int(round_payload["initials_player_count"]),
+        era=str(round_payload.get("era") or "all_time"),
+        era_label=str(round_payload.get("era_label") or "All-time"),
     )
 
 
@@ -79,6 +93,7 @@ def game_guess(payload: GameGuessRequest) -> GameGuessResponse:
         payload.used_player_ids,
         payload.mode,
         payload.time_remaining,
+        payload.era,
     )
     return GameGuessResponse(
         correct=result.correct,
@@ -95,7 +110,7 @@ def game_guess(payload: GameGuessRequest) -> GameGuessResponse:
 
 @router.post("/game/reveal", response_model=InitialsRevealResponse)
 def reveal_initials(payload: InitialsRevealRequest) -> InitialsRevealResponse:
-    reveals = get_reveals_for_initials(payload.initials_list, payload.mode)
+    reveals = get_reveals_for_initials(payload.initials_list, payload.mode, payload.era)
     return InitialsRevealResponse(
         reveals=[
             InitialsRevealEntry(

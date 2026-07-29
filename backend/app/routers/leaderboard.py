@@ -6,6 +6,7 @@ from fastapi import APIRouter, Header, HTTPException, Query
 
 from app.schemas import (
     CareerGameRequest,
+    EraStatEntry,
     LeaderboardResponse,
     LeaderboardEntry,
     ProfileResponse,
@@ -32,6 +33,9 @@ def _leaderboard_unavailable() -> HTTPException:
 
 
 def _profile_response(profile: dict, display_name: str) -> ProfileResponse:
+    era_stats = [
+        EraStatEntry(**entry) for entry in (profile.get("era_stats") or [])
+    ]
     return ProfileResponse(
         display_name=str(profile.get("display_name") or display_name),
         high_score=int(profile.get("high_score") or 0),
@@ -45,6 +49,7 @@ def _profile_response(profile: dict, display_name: str) -> ProfileResponse:
         friendly_games_played=int(profile.get("friendly_games_played") or 0),
         friendly_points_earned=int(profile.get("friendly_points_earned") or 0),
         friendly_avg_points=float(profile.get("friendly_avg_points") or 0),
+        era_stats=era_stats,
         rank=profile.get("rank"),
         updated_at=profile.get("updated_at"),
     )
@@ -142,6 +147,7 @@ def leaderboard_career(
             payload.score,
             payload.correct,
             payload.attempts,
+            payload.era,
         )
     except LeaderboardUnavailable as exc:
         raise _leaderboard_unavailable() from exc

@@ -533,20 +533,20 @@ export function MultiplayerRoom({
           </button>
 
           {variant === 'friends' && (
-            <div className="flex gap-2">
+            <div className="flex w-full flex-col gap-2 sm:flex-row">
               <input
                 type="text"
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
                 maxLength={8}
                 placeholder="ROOM CODE"
-                className="flex-1 rounded-xl border border-court-600 bg-court-900 px-4 py-3 uppercase tracking-widest text-white placeholder:text-slate-600 focus:border-accent focus:outline-none"
+                className="min-w-0 flex-1 rounded-xl border border-court-600 bg-court-900 px-4 py-3 uppercase tracking-widest text-white placeholder:text-slate-600 focus:border-accent focus:outline-none"
               />
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => void handleJoin()}
-                className="rounded-xl border border-court-500 px-4 py-3 text-sm font-medium text-white hover:border-accent disabled:opacity-50"
+                className="w-full shrink-0 rounded-xl border border-court-500 px-5 py-3 text-sm font-medium text-white hover:border-accent disabled:opacity-50 sm:w-auto"
               >
                 Join
               </button>

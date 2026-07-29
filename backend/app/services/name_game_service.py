@@ -333,45 +333,67 @@ def _invalid_player_message(mode: str) -> str:
     return "That is not a valid basketball player."
 
 
-def get_game_status(mode: str | None = None) -> dict[str, str | int]:
+def get_game_status(mode: str | None = None, era: str | None = None) -> dict[str, str | int]:
     resolved_mode = _ensure_cache(mode)
-    players = _players_cache.get(resolved_mode) or []
+    resolved_era = normalize_era(era)
+    players = _players_for_era(resolved_era, resolved_mode)
     return {
         "mode": resolved_mode,
         "mode_label": _mode_label(resolved_mode),
+        "era": resolved_era,
+        "era_label": era_label(resolved_era),
         "season": settings.current_season,
         "player_count": len(players),
         "timer_seconds": settings.game_timer_seconds,
     }
 
 
-def random_initials(used_player_ids: set[int] | None = None, mode: str | None = None) -> str:
-    resolved_mode = _ensure_cache(mode)
-    players = _players_cache.get(resolved_mode) or []
+def random_initials(
+    used_player_ids: set[int] | None = None,
+    mode: str | None = None,
+    era: str | None = None,
+) -> str:
+    players = _players_for_era(era, mode)
     used = used_player_ids or set()
     available = [player for player in players if player.nba_id not in used]
     pool = available or players
+    if not pool:
+        raise ValueError(f"No players available for era '{normalize_era(era)}'.")
     return random.choice(pool).initials
 
 
-def count_players_for_initials(initials: str, mode: str | None = None) -> int:
-    resolved_mode = _ensure_cache(mode)
-    initials_map = _initials_index.get(resolved_mode) or {}
+def count_players_for_initials(
+    initials: str,
+    mode: str | None = None,
+    era: str | None = None,
+) -> int:
+    initials_map = _initials_index_for_players(_players_for_era(era, mode))
     return len(initials_map.get(initials.strip().upper(), []))
 
 
-def get_players_for_initials(initials: str, mode: str | None = None) -> list[GamePlayer]:
-    resolved_mode = _ensure_cache(mode)
-    initials_map = _initials_index.get(resolved_mode) or {}
+def get_players_for_initials(
+    initials: str,
+    mode: str | None = None,
+    era: str | None = None,
+) -> list[GamePlayer]:
+    initials_map = _initials_index_for_players(_players_for_era(era, mode))
     players = initials_map.get(initials.strip().upper(), [])
     return sorted(players, key=lambda player: (player.from_season or "9999", player.full_name))
 
 
-def get_player_names_for_initials(initials: str, mode: str | None = None) -> list[str]:
-    return [player.full_name for player in get_players_for_initials(initials, mode)]
+def get_player_names_for_initials(
+    initials: str,
+    mode: str | None = None,
+    era: str | None = None,
+) -> list[str]:
+    return [player.full_name for player in get_players_for_initials(initials, mode, era)]
 
 
-def get_reveals_for_initials(initials_list: list[str], mode: str | None = None) -> list[dict[str, str | int | list[dict[str, str]]]]:
+def get_reveals_for_initials(
+    initials_list: list[str],
+    mode: str | None = None,
+    era: str | None = None,
+) -> list[dict[str, str | int | list[dict[str, str]]]]:
     seen: set[str] = set()
     reveals: list[dict[str, str | int | list[dict[str, str]]]] = []
     for raw in initials_list:
@@ -379,7 +401,7 @@ def get_reveals_for_initials(initials_list: list[str], mode: str | None = None) 
         if not key or key in seen:
             continue
         seen.add(key)
-        players = [_player_reveal_entry(player) for player in get_players_for_initials(key, mode)]
+        players = [_player_reveal_entry(player) for player in get_players_for_initials(key, mode, era)]
         reveals.append(
             {
                 "initials": key,
@@ -390,15 +412,22 @@ def get_reveals_for_initials(initials_list: list[str], mode: str | None = None) 
     return reveals
 
 
-def start_round(used_player_ids: list[int] | None = None, mode: str | None = None) -> dict[str, str | int]:
+def start_round(
+    used_player_ids: list[int] | None = None,
+    mode: str | None = None,
+    era: str | None = None,
+) -> dict[str, str | int]:
     resolved_mode = _ensure_cache(mode)
+    resolved_era = normalize_era(era)
     used = set(used_player_ids or [])
-    initials = random_initials(used, resolved_mode)
+    initials = random_initials(used, resolved_mode, resolved_era)
     return {
         "initials": initials,
-        "initials_player_count": count_players_for_initials(initials, resolved_mode),
+        "initials_player_count": count_players_for_initials(initials, resolved_mode, resolved_era),
         "season": settings.current_season,
         "mode": resolved_mode,
+        "era": resolved_era,
+        "era_label": era_label(resolved_era),
     }
 
 
@@ -559,10 +588,12 @@ def validate_guess(
     used_player_ids: list[int] | None = None,
     mode: str | None = None,
     time_remaining: int | None = None,
+    era: str | None = None,
 ) -> GuessResult:
     resolved_mode = _ensure_cache(mode)
-    players = _players_cache.get(resolved_mode) or []
-    initials_map = _initials_index.get(resolved_mode) or {}
+    resolved_era = normalize_era(era)
+    players = _players_for_era(resolved_era, resolved_mode)
+    initials_map = _initials_index_for_players(players)
 
     used = set(used_player_ids or [])
     target_initials = initials.strip().upper()
@@ -573,7 +604,7 @@ def validate_guess(
             correct=False,
             game_over=True,
             reason="Enter a player name.",
-            matching_players=tuple(get_player_names_for_initials(target_initials, resolved_mode)),
+            matching_players=tuple(get_player_names_for_initials(target_initials, resolved_mode, resolved_era)),
         )
 
     candidates = [player for player in initials_map.get(target_initials, []) if player.nba_id not in used]
@@ -587,7 +618,7 @@ def validate_guess(
             if score >= 0.99
             else f"Close enough — counted as {player.full_name}."
         )
-        next_initials = random_initials(used, resolved_mode)
+        next_initials = random_initials(used, resolved_mode, resolved_era)
         return GuessResult(
             correct=True,
             game_over=False,
@@ -595,12 +626,14 @@ def validate_guess(
             matched_name=player.full_name,
             matched_nba_id=player.nba_id,
             next_initials=next_initials,
-            next_initials_player_count=count_players_for_initials(next_initials, resolved_mode),
+            next_initials_player_count=count_players_for_initials(
+                next_initials, resolved_mode, resolved_era
+            ),
             reason=reason,
         )
 
     pool_player, pool_score = _fuzzy_match_player(guess, players)
-    matching = tuple(get_player_names_for_initials(target_initials, resolved_mode))
+    matching = tuple(get_player_names_for_initials(target_initials, resolved_mode, resolved_era))
     if pool_player and pool_score >= FUZZY_MATCH_THRESHOLD:
         if pool_player.initials != target_initials:
             return GuessResult(

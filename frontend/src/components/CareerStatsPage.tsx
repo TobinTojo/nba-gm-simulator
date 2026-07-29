@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/api/client';
-import type { ProfileResponse } from '@/types';
+import type { EraStatEntry, ProfileResponse } from '@/types';
 import type { Session, User } from '@supabase/supabase-js';
 
 interface CareerStatsPageProps {
@@ -54,12 +54,16 @@ export function CareerStatsPage({
     (typeof user?.user_metadata?.picture === 'string' && user.user_metadata.picture) ||
     null;
 
+  const eraStats = profile?.era_stats ?? [];
+
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 py-10 sm:px-6">
       <div className="animate-slide-up">
         <p className="text-xs font-semibold uppercase tracking-[0.35em] text-accent">Career</p>
         <h1 className="mt-2 font-display text-5xl tracking-wide text-fg">Your Stats</h1>
-        <p className="mt-3 text-slate-400">Solo and friendly averages tied to your Google account.</p>
+        <p className="mt-3 text-slate-400">
+          Solo averages by era, plus friendly results tied to your Google account.
+        </p>
       </div>
 
       <section className="card mt-8 p-6 sm:p-8 animate-slide-up">
@@ -108,13 +112,41 @@ export function CareerStatsPage({
               </div>
             </div>
 
-            <p className="mt-8 text-[10px] uppercase tracking-[0.22em] text-slate-500">Solo</p>
+            <p className="mt-8 text-[10px] uppercase tracking-[0.22em] text-slate-500">Solo overall</p>
             <div className="mt-3 grid gap-4 sm:grid-cols-2">
               <StatCard label="Games played" value={String(profile?.games_played ?? 0)} />
               <StatCard label="Accuracy" value={`${profile?.accuracy ?? 0}%`} accent />
               <StatCard label="Avg points" value={String(profile?.avg_points ?? 0)} />
               <StatCard label="Best score" value={String(profile?.high_score ?? 0)} />
             </div>
+
+            <p className="mt-8 text-[10px] uppercase tracking-[0.22em] text-slate-500">
+              Solo by era
+            </p>
+            {eraStats.length === 0 ? (
+              <p className="mt-3 text-sm text-slate-400">
+                Play solo in different eras to see which decades you know best.
+              </p>
+            ) : (
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full min-w-[28rem] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-white/10 text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                      <th className="py-2 pr-3 font-medium">Era</th>
+                      <th className="py-2 pr-3 font-medium">Games</th>
+                      <th className="py-2 pr-3 font-medium">Avg</th>
+                      <th className="py-2 pr-3 font-medium">Best</th>
+                      <th className="py-2 font-medium">Acc</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {eraStats.map((row) => (
+                      <EraStatRow key={row.era} row={row} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             <p className="mt-8 text-[10px] uppercase tracking-[0.22em] text-slate-500">Friendly</p>
             <div className="mt-3 grid gap-4 sm:grid-cols-2">
@@ -130,6 +162,18 @@ export function CareerStatsPage({
         </button>
       </section>
     </main>
+  );
+}
+
+function EraStatRow({ row }: { row: EraStatEntry }) {
+  return (
+    <tr className="border-b border-white/5 text-slate-300">
+      <td className="py-3 pr-3 font-medium text-white">{row.era_label}</td>
+      <td className="py-3 pr-3">{row.games_played}</td>
+      <td className="py-3 pr-3 text-accent">{row.avg_points}</td>
+      <td className="py-3 pr-3">{row.high_score}</td>
+      <td className="py-3">{row.accuracy}%</td>
+    </tr>
   );
 }
 
