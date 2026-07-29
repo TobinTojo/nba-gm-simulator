@@ -45,6 +45,7 @@ class MultiplayerRoom:
     era: str
     sequence: list[str]
     status: str = "waiting"  # waiting | countdown | playing | finished
+    is_public: bool = False
     round_index: int = 0
     used_player_ids: list[int] = field(default_factory=list)
     round_passes: set[str] = field(default_factory=set)
@@ -148,6 +149,7 @@ def _closed_room_payload(room: MultiplayerRoom, message: str) -> dict[str, Any]:
         "total_rounds": room.total_rounds,
         "era": room.era,
         "era_label": era_label(room.era),
+        "is_public": room.is_public,
         "round_seconds": ROUND_SECONDS,
         "countdown_seconds": COUNTDOWN_SECONDS,
         "round_index": room.round_index,
@@ -329,6 +331,7 @@ def serialize_room(room: MultiplayerRoom, viewer_id: str | None = None) -> dict[
         "total_rounds": room.total_rounds,
         "era": room.era,
         "era_label": era_label(room.era),
+        "is_public": room.is_public,
         "round_seconds": ROUND_SECONDS,
         "countdown_seconds": COUNTDOWN_SECONDS,
         "round_index": room.round_index,
@@ -376,6 +379,7 @@ def create_room(
     total_rounds: int | None = None,
     era: str | None = None,
     avatar_url: str | None = None,
+    is_public: bool = False,
 ) -> dict[str, Any]:
     name = display_name.strip()[:40] or "Player 1"
     player_id = player_id.strip()
@@ -394,6 +398,7 @@ def create_room(
             display_name=name,
             avatar_url=avatar_url,
         )
+        visibility = "Public lobby open" if is_public else "Share this code. Waiting for players"
         room = MultiplayerRoom(
             code=code,
             host_id=player_id,
@@ -401,13 +406,38 @@ def create_room(
             total_rounds=rounds,
             era=resolved_era,
             sequence=sequence,
-            last_message=(
-                f"Share this code. Waiting for players "
-                f"({rounds} rounds · {era_label(resolved_era)})."
-            ),
+            is_public=bool(is_public),
+            last_message=f"{visibility} ({rounds} rounds · {era_label(resolved_era)}).",
         )
         _rooms[code] = room
         return serialize_room(room, player_id)
+
+
+def list_public_lobbies() -> list[dict[str, Any]]:
+    """Return open public waiting rooms with free seats."""
+    with _lock:
+        _cleanup_expired_locked()
+        lobbies: list[dict[str, Any]] = []
+        for room in _rooms.values():
+            if not room.is_public or room.status != "waiting":
+                continue
+            if len(room.players) >= MAX_PLAYERS:
+                continue
+            host = next((p for p in room.players if p.player_id == room.host_id), room.players[0])
+            lobbies.append(
+                {
+                    "code": room.code,
+                    "host_name": host.display_name if host else "Host",
+                    "player_count": len(room.players),
+                    "max_players": MAX_PLAYERS,
+                    "total_rounds": room.total_rounds,
+                    "era": room.era,
+                    "era_label": era_label(room.era),
+                    "updated_at": room.updated_at,
+                }
+            )
+        lobbies.sort(key=lambda item: item["updated_at"], reverse=True)
+        return lobbies
 
 
 def join_room(
@@ -521,7 +551,7 @@ def start_match(code: str, player_id: str) -> dict[str, Any]:
 
 
 def rematch(code: str, player_id: str) -> dict[str, Any]:
-    """Any player can ready up; rematch starts only when everyone remaining opts in."""
+    """Any player can ready up; rematch starts only when every seated player opts in."""
     room_code = code.strip().upper()
     player_id = player_id.strip()
 
@@ -531,20 +561,28 @@ def rematch(code: str, player_id: str) -> dict[str, Any]:
             raise MultiplayerError("Room not found.", 404)
         if room.status != "finished":
             raise MultiplayerError("Rematch is only available after the match ends.")
-        if len(room.players) < 2:
-            raise MultiplayerError("Need at least 2 players to rematch.")
 
         player = _find_player(room, player_id)
         if player is None:
             raise MultiplayerError("You are not in this room.", 403)
 
+        present_ids = {entry.player_id for entry in room.players}
+        if len(present_ids) < 2:
+            raise MultiplayerError("Need at least 2 players to rematch.")
+
+        # Drop ready flags for anyone who already left, then mark this player.
+        room.rematch_ready.intersection_update(present_ids)
         room.rematch_ready.add(player_id)
-        ready = len(room.rematch_ready)
-        needed = len(room.players)
         room.updated_at = time.time()
 
-        if ready < needed:
-            room.last_message = f"{player.display_name} wants a rematch ({ready}/{needed})."
+        ready_count = len(room.rematch_ready)
+        needed = len(present_ids)
+
+        # Start only when the ready set exactly matches every current player.
+        if room.rematch_ready != present_ids:
+            room.last_message = (
+                f"{player.display_name} wants a rematch ({ready_count}/{needed})."
+            )
             return serialize_room(room, player_id)
 
         room.sequence = _build_sequence(room.total_rounds, room.era)
@@ -560,7 +598,7 @@ def rematch(code: str, player_id: str) -> dict[str, Any]:
         room.round_started_at = None
         room.countdown_started_at = time.time()
         room.friendly_win_recorded = False
-        room.last_message = "Rematch! Get ready..."
+        room.last_message = "Rematch! Everyone is ready. Get ready..."
         return serialize_room(room, player_id)
 
 

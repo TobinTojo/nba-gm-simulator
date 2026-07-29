@@ -121,6 +121,7 @@ export interface MultiplayerRoomResponse {
   total_rounds: number;
   era: string;
   era_label: string;
+  is_public?: boolean;
   round_seconds: number;
   countdown_seconds: number;
   round_index: number;
@@ -143,4 +144,19 @@ export interface MultiplayerRoomResponse {
   you_ready_for_rematch?: boolean;
   accepted?: boolean | null;
   your_feedback?: string | null;
+}
+
+export interface PublicLobbyEntry {
+  code: string;
+  host_name: string;
+  player_count: number;
+  max_players: number;
+  total_rounds: number;
+  era: string;
+  era_label: string;
+  updated_at: number;
+}
+
+export interface PublicLobbyListResponse {
+  lobbies: PublicLobbyEntry[];
 }

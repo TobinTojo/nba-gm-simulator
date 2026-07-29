@@ -3,11 +3,14 @@ import { api } from '@/api/client';
 import type { ProfileResponse } from '@/types';
 import type { Session, User } from '@supabase/supabase-js';
 
+type NavMode = 'home' | 'solo' | 'versus' | 'public' | 'stats' | 'settings';
+
 interface SiteNavProps {
-  mode: 'home' | 'solo' | 'versus' | 'stats' | 'settings';
+  mode: NavMode;
   onGoHome: () => void;
   onPlaySolo: () => void;
   onPlayFriends: () => void;
+  onPlayAnyone: () => void;
   onOpenStats: () => void;
   onOpenSettings: () => void;
   onScrollAbout: () => void;
@@ -25,6 +28,7 @@ export function SiteNav({
   onGoHome,
   onPlaySolo,
   onPlayFriends,
+  onPlayAnyone,
   onOpenStats,
   onOpenSettings,
   onScrollAbout,
@@ -36,7 +40,8 @@ export function SiteNav({
   signOut,
   profileRefreshKey = 0,
 }: SiteNavProps) {
-  const [open, setOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -91,16 +96,68 @@ export function SiteNav({
   useEffect(() => {
     function onPointerDown(event: MouseEvent) {
       if (!menuRef.current?.contains(event.target as Node)) {
-        setOpen(false);
+        setProfileOpen(false);
+        setMobileOpen(false);
       }
     }
     document.addEventListener('mousedown', onPointerDown);
     return () => document.removeEventListener('mousedown', onPointerDown);
   }, []);
 
+  function runNav(action: () => void) {
+    setMobileOpen(false);
+    setProfileOpen(false);
+    action();
+  }
+
+  const navButtons = (
+    <>
+      <button
+        type="button"
+        onClick={() => runNav(onPlaySolo)}
+        className={`nav-link ${mode === 'solo' ? 'nav-link-active' : ''}`}
+      >
+        Solo
+      </button>
+      <button
+        type="button"
+        onClick={() => runNav(onPlayFriends)}
+        className={`nav-link ${mode === 'versus' ? 'nav-link-active' : ''}`}
+      >
+        Friends
+      </button>
+      <button
+        type="button"
+        onClick={() => runNav(onPlayAnyone)}
+        className={`nav-link ${mode === 'public' ? 'nav-link-active' : ''}`}
+      >
+        Play with anyone
+      </button>
+      <button
+        type="button"
+        onClick={() => runNav(onOpenStats)}
+        className={`nav-link ${mode === 'stats' ? 'nav-link-active' : ''}`}
+      >
+        Stats
+      </button>
+      <button
+        type="button"
+        onClick={() => runNav(onOpenSettings)}
+        className={`nav-link ${mode === 'settings' ? 'nav-link-active' : ''}`}
+      >
+        Settings
+      </button>
+      {mode === 'home' && (
+        <button type="button" onClick={() => runNav(onScrollAbout)} className="nav-link">
+          About
+        </button>
+      )}
+    </>
+  );
+
   return (
     <header className="site-nav sticky top-0 z-40 border-b border-white/5 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6" ref={menuRef}>
         <button type="button" onClick={onGoHome} className="group flex items-center gap-3 text-left">
           <span className="relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-accent shadow-[0_0_24px_rgba(249,115,22,0.35)]">
             <img src="/basketball.png" alt="" className="h-6 w-6 object-contain transition group-hover:rotate-45" />
@@ -115,59 +172,39 @@ export function SiteNav({
           </span>
         </button>
 
-        <nav className="hidden items-center gap-1 md:flex">
-          <button
-            type="button"
-            onClick={onPlaySolo}
-            className={`nav-link ${mode === 'solo' ? 'nav-link-active' : ''}`}
-          >
-            Solo
-          </button>
-          <button
-            type="button"
-            onClick={onPlayFriends}
-            className={`nav-link ${mode === 'versus' ? 'nav-link-active' : ''}`}
-          >
-            Friends
-          </button>
-          <button
-            type="button"
-            onClick={onOpenStats}
-            className={`nav-link ${mode === 'stats' ? 'nav-link-active' : ''}`}
-          >
-            Stats
-          </button>
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            className={`nav-link ${mode === 'settings' ? 'nav-link-active' : ''}`}
-          >
-            Settings
-          </button>
-          {mode === 'home' && (
-            <button type="button" onClick={onScrollAbout} className="nav-link">
-              About
-            </button>
-          )}
-        </nav>
+        <nav className="hidden items-center gap-1 lg:flex">{navButtons}</nav>
 
-        <div className="relative flex items-center gap-2" ref={menuRef}>
+        <div className="relative flex items-center gap-2">
           <button
             type="button"
-            onClick={onOpenSettings}
-            className={`nav-link md:hidden ${mode === 'settings' ? 'nav-link-active' : ''}`}
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 text-fg transition hover:border-accent/40 hover:bg-white/5 lg:hidden"
+            aria-label="Open menu"
+            aria-expanded={mobileOpen}
+            onClick={() => {
+              setMobileOpen((value) => !value);
+              setProfileOpen(false);
+            }}
           >
-            Settings
+            <span className="sr-only">Menu</span>
+            <span className="flex w-5 flex-col gap-1.5">
+              <span className={`h-0.5 w-full bg-current transition ${mobileOpen ? 'translate-y-2 rotate-45' : ''}`} />
+              <span className={`h-0.5 w-full bg-current transition ${mobileOpen ? 'opacity-0' : ''}`} />
+              <span className={`h-0.5 w-full bg-current transition ${mobileOpen ? '-translate-y-2 -rotate-45' : ''}`} />
+            </span>
           </button>
+
           {!enabled ? null : authLoading ? (
             <span className="text-xs text-slate-500">...</span>
           ) : user ? (
             <>
               <button
                 type="button"
-                onClick={() => setOpen((value) => !value)}
+                onClick={() => {
+                  setProfileOpen((value) => !value);
+                  setMobileOpen(false);
+                }}
                 className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 py-1 pl-1 pr-3 transition hover:border-accent/40 hover:bg-white/10"
-                aria-expanded={open}
+                aria-expanded={profileOpen}
                 aria-haspopup="menu"
               >
                 {avatarUrl ? (
@@ -182,7 +219,7 @@ export function SiteNav({
                 </span>
               </button>
 
-              {open && (
+              {profileOpen && (
                 <div
                   role="menu"
                   className="absolute right-0 top-[calc(100%+0.6rem)] w-72 overflow-hidden rounded-2xl border border-white/10 bg-court-900/95 p-4 shadow-2xl shadow-black/40 backdrop-blur-xl animate-slide-up"
@@ -216,7 +253,7 @@ export function SiteNav({
                   <button
                     type="button"
                     onClick={() => {
-                      setOpen(false);
+                      setProfileOpen(false);
                       void signOut();
                     }}
                     className="mt-4 w-full rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-300 transition hover:border-red-400/40 hover:text-red-300"
@@ -234,6 +271,12 @@ export function SiteNav({
             >
               Sign in
             </button>
+          )}
+
+          {mobileOpen && (
+            <div className="absolute right-0 top-[calc(100%+0.6rem)] w-64 overflow-hidden rounded-2xl border border-white/10 bg-court-900/95 p-2 shadow-2xl shadow-black/40 backdrop-blur-xl animate-slide-up lg:hidden">
+              <nav className="flex flex-col">{navButtons}</nav>
+            </div>
           )}
         </div>
       </div>

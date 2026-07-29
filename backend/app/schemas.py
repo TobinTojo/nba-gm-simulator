@@ -614,6 +614,22 @@ class MultiplayerPlayerState(BaseModel):
 class MultiplayerCreateRequest(BaseModel):
     total_rounds: int = 9
     era: str = "all_time"
+    is_public: bool = False
+
+
+class PublicLobbyEntry(BaseModel):
+    code: str
+    host_name: str
+    player_count: int
+    max_players: int = 4
+    total_rounds: int = 9
+    era: str = "all_time"
+    era_label: str = "All-time"
+    updated_at: float = 0
+
+
+class PublicLobbyListResponse(BaseModel):
+    lobbies: list[PublicLobbyEntry] = Field(default_factory=list)
 
 
 class MultiplayerJoinRequest(BaseModel):
@@ -654,6 +670,7 @@ class MultiplayerRoomResponse(BaseModel):
     total_rounds: int = 9
     era: str = "all_time"
     era_label: str = "All-time"
+    is_public: bool = False
     round_seconds: int = 30
     countdown_seconds: int = 3
     round_index: int = 0

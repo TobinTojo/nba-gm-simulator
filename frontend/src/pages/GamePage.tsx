@@ -18,7 +18,7 @@ import type { GamePhase, InitialsRevealEntry, SessionRound } from '@/types';
 const DEFAULT_TIMER_SECONDS = 30;
 const LOW_TIME_SECONDS = 5;
 
-type AppMode = 'home' | 'solo' | 'versus' | 'stats' | 'settings';
+type AppMode = 'home' | 'solo' | 'versus' | 'public' | 'stats' | 'settings';
 
 export function GamePage() {
   const { soundEnabled } = useSettings();
@@ -473,6 +473,12 @@ export function GamePage() {
             setPhase('idle');
           })
         }
+        onPlayAnyone={() =>
+          requestNavigation(() => {
+            setMode('public');
+            setPhase('idle');
+          })
+        }
         onOpenStats={() =>
           requestNavigation(() => {
             setMode('stats');
@@ -524,6 +530,7 @@ export function GamePage() {
             timerSeconds={timerSeconds}
             onPlaySolo={() => void handleStart()}
             onPlayFriends={() => setMode('versus')}
+            onPlayAnyone={() => setMode('public')}
           />
           <AboutSection />
           <CreditsSection />
@@ -563,8 +570,9 @@ export function GamePage() {
       ) : (
         <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 py-8 sm:px-6 sm:py-10">
           <section className="card flex flex-1 flex-col p-6 sm:p-8 animate-slide-up">
-            {mode === 'versus' ? (
+            {mode === 'versus' || mode === 'public' ? (
               <MultiplayerRoom
+                variant={mode === 'public' ? 'public' : 'friends'}
                 onExit={() => requestNavigation(goHome)}
                 onMatchFinished={() => setProfileRefreshKey((value) => value + 1)}
               />

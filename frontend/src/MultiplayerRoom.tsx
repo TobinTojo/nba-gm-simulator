@@ -6,7 +6,7 @@ import { useSettings } from '@/context/SettingsContext';
 import { useLeaderboardAuth } from '@/hooks/useLeaderboardAuth';
 import { playSfx } from '@/lib/sounds';
 import { WinnerConfetti } from '@/WinnerConfetti';
-import type { MultiplayerRoomResponse } from '@/types';
+import type { MultiplayerRoomResponse, PublicLobbyEntry } from '@/types';
 
 const ROUND_OPTIONS = [9, 12, 15] as const;
 const ERA_OPTIONS = [
@@ -23,15 +23,23 @@ const ERA_OPTIONS = [
 interface MultiplayerRoomProps {
   onExit: () => void;
   onMatchFinished?: () => void;
+  /** friends = private code lobbies; public = open matchmaking list */
+  variant?: 'friends' | 'public';
 }
 
-export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProps) {
+export function MultiplayerRoom({
+  onExit,
+  onMatchFinished,
+  variant = 'friends',
+}: MultiplayerRoomProps) {
   const { soundEnabled } = useSettings();
   const { enabled, user, session, authLoading, signInWithGoogle, signOut } = useLeaderboardAuth();
   const [joinCode, setJoinCode] = useState('');
   const [selectedRounds, setSelectedRounds] = useState<(typeof ROUND_OPTIONS)[number]>(9);
   const [selectedEra, setSelectedEra] = useState<(typeof ERA_OPTIONS)[number]['value']>('all_time');
   const [room, setRoom] = useState<MultiplayerRoomResponse | null>(null);
+  const [publicLobbies, setPublicLobbies] = useState<PublicLobbyEntry[]>([]);
+  const [lobbiesLoading, setLobbiesLoading] = useState(variant === 'public');
   const [guess, setGuess] = useState('');
   const [feedback, setFeedback] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +67,33 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
     user?.user_metadata?.user_name ??
     user?.email?.split('@')[0] ??
     'Player';
+
+  useEffect(() => {
+    if (variant !== 'public' || room || !accessToken) return;
+
+    let cancelled = false;
+    async function loadLobbies() {
+      try {
+        const response = await api.listPublicLobbies(accessToken!);
+        if (!cancelled) {
+          setPublicLobbies(response.lobbies);
+          setLobbiesLoading(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setLobbiesLoading(false);
+        }
+      }
+    }
+
+    setLobbiesLoading(true);
+    void loadLobbies();
+    const interval = window.setInterval(() => void loadLobbies(), 2500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [variant, room, accessToken]);
 
   useEffect(() => {
     if (!room || !accessToken || correctFlash) return;
@@ -191,12 +226,8 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
     return () => {
       window.removeEventListener('pagehide', onUnload);
       window.removeEventListener('beforeunload', onUnload);
-      const code = roomCodeRef.current;
-      const token = accessTokenRef.current;
-      if (code && token && !leavingRef.current) {
-        leavingRef.current = true;
-        void api.leaveMultiplayerRoom(code, token).catch(() => undefined);
-      }
+      // Do not leave the room on React unmount — that can fire during remounts
+      // and incorrectly close finished lobbies. Explicit Leave / pagehide handle exit.
     };
   }, []);
 
@@ -207,11 +238,35 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
     setError(null);
     const wakeTimer = window.setTimeout(() => setServerWaking(true), 2500);
     try {
-      const created = await api.createMultiplayerRoom(accessToken, selectedRounds, selectedEra);
+      const created = await api.createMultiplayerRoom(
+        accessToken,
+        selectedRounds,
+        selectedEra,
+        variant === 'public',
+      );
       setRoom(created);
       setFeedback('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create room.');
+    } finally {
+      window.clearTimeout(wakeTimer);
+      setServerWaking(false);
+      setBusy(false);
+    }
+  }
+
+  async function handleJoinLobby(code: string) {
+    if (!accessToken) return;
+    setBusy(true);
+    setServerWaking(false);
+    setError(null);
+    const wakeTimer = window.setTimeout(() => setServerWaking(true), 2500);
+    try {
+      const joined = await api.joinMultiplayerRoom(code, accessToken);
+      setRoom(joined);
+      setFeedback('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not join lobby.');
     } finally {
       window.clearTimeout(wakeTimer);
       setServerWaking(false);
@@ -225,21 +280,7 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
       setError('Enter a room code.');
       return;
     }
-    setBusy(true);
-    setServerWaking(false);
-    setError(null);
-    const wakeTimer = window.setTimeout(() => setServerWaking(true), 2500);
-    try {
-      const joined = await api.joinMultiplayerRoom(joinCode.trim().toUpperCase(), accessToken);
-      setRoom(joined);
-      setFeedback('');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not join room.');
-    } finally {
-      window.clearTimeout(wakeTimer);
-      setServerWaking(false);
-      setBusy(false);
-    }
+    await handleJoinLobby(joinCode.trim().toUpperCase());
   }
 
   async function updateLobbySettings(next: { totalRounds?: number; era?: string }) {
@@ -428,11 +469,16 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
 
     return (
       <div className="flex flex-1 flex-col items-center justify-center text-center">
-        <p className="text-sm uppercase tracking-wider text-accent">Multiplayer</p>
-        <h2 className="mt-2 font-display text-4xl tracking-wide text-white">Play with friend(s)</h2>
+        <p className="text-sm uppercase tracking-wider text-accent">
+          {variant === 'public' ? 'Open matchmaking' : 'Multiplayer'}
+        </p>
+        <h2 className="mt-2 font-display text-4xl tracking-wide text-white">
+          {variant === 'public' ? 'Play with anyone' : 'Play with friend(s)'}
+        </h2>
         <p className="mt-3 max-w-md text-slate-400">
-          Up to 4 players. Pick an era, race to name players, and pass only skips when everyone
-          passes.
+          {variant === 'public'
+            ? 'Create a public lobby or join an open room from the list below.'
+            : 'Up to 4 players. Pick an era, race to name players, and pass only skips when everyone passes.'}
         </p>
         <p className="mt-4 text-sm text-slate-300">
           Signed in as <span className="text-white">{displayName}</span>
@@ -483,28 +529,77 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
             onClick={() => void handleCreate()}
             className="btn-primary w-full py-3 disabled:opacity-50"
           >
-            {busy ? 'Creating...' : 'Create Room'}
+            {busy ? 'Creating...' : variant === 'public' ? 'Create public lobby' : 'Create Room'}
           </button>
 
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={joinCode}
-              onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-              maxLength={8}
-              placeholder="ROOM CODE"
-              className="flex-1 rounded-xl border border-court-600 bg-court-900 px-4 py-3 uppercase tracking-widest text-white placeholder:text-slate-600 focus:border-accent focus:outline-none"
-            />
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void handleJoin()}
-              className="rounded-xl border border-court-500 px-4 py-3 text-sm font-medium text-white hover:border-accent disabled:opacity-50"
-            >
-              Join
-            </button>
-          </div>
+          {variant === 'friends' && (
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                maxLength={8}
+                placeholder="ROOM CODE"
+                className="flex-1 rounded-xl border border-court-600 bg-court-900 px-4 py-3 uppercase tracking-widest text-white placeholder:text-slate-600 focus:border-accent focus:outline-none"
+              />
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void handleJoin()}
+                className="rounded-xl border border-court-500 px-4 py-3 text-sm font-medium text-white hover:border-accent disabled:opacity-50"
+              >
+                Join
+              </button>
+            </div>
+          )}
         </div>
+
+        {variant === 'public' && (
+          <div className="mt-8 w-full max-w-lg text-left">
+            <div className="mb-3 flex items-end justify-between gap-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                Open lobbies
+              </p>
+              <p className="text-xs text-slate-600">Updates every few seconds</p>
+            </div>
+            {lobbiesLoading ? (
+              <p className="rounded-2xl border border-white/10 bg-court-950/50 px-4 py-6 text-center text-sm text-slate-400">
+                Loading lobbies...
+              </p>
+            ) : publicLobbies.length === 0 ? (
+              <p className="rounded-2xl border border-white/10 bg-court-950/50 px-4 py-6 text-center text-sm text-slate-400">
+                No open lobbies right now. Create one and others can jump in.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {publicLobbies.map((lobby) => (
+                  <li key={lobby.code}>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void handleJoinLobby(lobby.code)}
+                      className="flex w-full items-center justify-between gap-3 rounded-2xl border border-white/10 bg-court-950/50 px-4 py-4 text-left transition hover:border-accent/50 hover:bg-court-900/80 disabled:opacity-50"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate font-semibold text-white">
+                          {lobby.host_name}
+                          <span className="ml-2 font-display tracking-widest text-accent">{lobby.code}</span>
+                        </span>
+                        <span className="mt-1 block text-xs text-slate-400">
+                          {lobby.era_label} · {lobby.total_rounds} rounds · {lobby.player_count}/
+                          {lobby.max_players} players
+                        </span>
+                      </span>
+                      <span className="shrink-0 rounded-full bg-accent px-3 py-1.5 text-xs font-semibold text-court-950">
+                        Join
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
         {error && <p className="mt-4 text-sm text-red-300">{error}</p>}
 

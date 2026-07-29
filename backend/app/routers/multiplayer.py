@@ -12,6 +12,7 @@ from app.schemas import (
     MultiplayerRoomResponse,
     MultiplayerSetRoundsRequest,
     MultiplayerStartRequest,
+    PublicLobbyListResponse,
 )
 from app.services.auth_service import (
     avatar_url_from_claims,
@@ -24,6 +25,7 @@ from app.services.multiplayer_service import (
     get_room,
     join_room,
     leave_room,
+    list_public_lobbies,
     rematch,
     set_settings,
     start_match,
@@ -51,10 +53,19 @@ def multiplayer_create(
             payload.total_rounds,
             payload.era,
             avatar_url_from_claims(claims),
+            payload.is_public,
         )
     except MultiplayerError as exc:
         _raise(exc)
     return MultiplayerRoomResponse(**room)
+
+
+@router.get("/multiplayer/lobbies", response_model=PublicLobbyListResponse)
+def multiplayer_list_lobbies(
+    authorization: str | None = Header(default=None),
+) -> PublicLobbyListResponse:
+    require_auth_user(authorization)
+    return PublicLobbyListResponse(lobbies=list_public_lobbies())
 
 
 @router.post("/multiplayer/join", response_model=MultiplayerRoomResponse)

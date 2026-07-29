@@ -5,6 +5,7 @@ interface LandingHeroProps {
   timerSeconds: number;
   onPlaySolo: () => void;
   onPlayFriends: () => void;
+  onPlayAnyone: () => void;
 }
 
 export function LandingHero({
@@ -12,6 +13,7 @@ export function LandingHero({
   timerSeconds,
   onPlaySolo,
   onPlayFriends,
+  onPlayAnyone,
 }: LandingHeroProps) {
   return (
     <section className="relative isolate min-h-[calc(100svh-4rem)] overflow-hidden">
@@ -28,12 +30,15 @@ export function LandingHero({
             Race the clock against every basketball initial in history, solo or with friends.
           </p>
 
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             <button type="button" onClick={onPlaySolo} className="btn-primary px-8 py-3.5 text-base">
               Start Solo
             </button>
             <button type="button" onClick={onPlayFriends} className="btn-ghost px-8 py-3.5 text-base">
               Play with friend(s)
+            </button>
+            <button type="button" onClick={onPlayAnyone} className="btn-ghost px-8 py-3.5 text-base">
+              Play with anyone
             </button>
           </div>
 

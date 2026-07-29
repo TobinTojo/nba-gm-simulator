@@ -7,6 +7,7 @@ import type {
   LeaderboardResponse,
   MultiplayerRoomResponse,
   ProfileResponse,
+  PublicLobbyListResponse,
   SubmitScoreResponse,
 } from '@/types';
 
@@ -78,11 +79,20 @@ export const api = {
       headers: { Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify({ score, correct, attempts }),
     }),
-  createMultiplayerRoom: (accessToken: string, totalRounds = 9, era = 'all_time') =>
+  createMultiplayerRoom: (
+    accessToken: string,
+    totalRounds = 9,
+    era = 'all_time',
+    isPublic = false,
+  ) =>
     request<MultiplayerRoomResponse>('/multiplayer/create', {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
-      body: JSON.stringify({ total_rounds: totalRounds, era }),
+      body: JSON.stringify({ total_rounds: totalRounds, era, is_public: isPublic }),
+    }),
+  listPublicLobbies: (accessToken: string) =>
+    request<PublicLobbyListResponse>('/multiplayer/lobbies', {
+      headers: { Authorization: `Bearer ${accessToken}` },
     }),
   joinMultiplayerRoom: (code: string, accessToken: string) =>
     request<MultiplayerRoomResponse>('/multiplayer/join', {
