@@ -607,6 +607,7 @@ class MultiplayerPlayerState(BaseModel):
     is_host: bool = False
     is_you: bool = False
     has_passed: bool = False
+    ready_for_rematch: bool = False
     avatar_url: str | None = None
 
 
@@ -671,6 +672,8 @@ class MultiplayerRoomResponse(BaseModel):
     you_are_host: bool = False
     in_room: bool = False
     can_start: bool = False
+    rematch_ready_count: int = 0
+    you_ready_for_rematch: bool = False
     accepted: bool | None = None
     your_feedback: str | None = None
 

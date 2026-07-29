@@ -779,21 +779,24 @@ export function MultiplayerRoom({ onExit, onMatchFinished }: MultiplayerRoomProp
           <MatchPodium players={room.players} />
 
           <p className="mt-6 text-sm text-slate-400">{room.last_message}</p>
+          <p className="mt-2 text-xs text-slate-500">
+            Rematch ready {room.rematch_ready_count ?? 0}/{room.players.length}
+          </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
-            {room.you_are_host ? (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void handleRematch()}
-                className="btn-primary px-8 py-3 disabled:opacity-50"
-              >
-                {busy ? 'Starting...' : 'Rematch'}
-              </button>
-            ) : (
-              <p className="w-full text-sm text-slate-500">Waiting for host to rematch...</p>
-            )}
+            <button
+              type="button"
+              disabled={busy || Boolean(room.you_ready_for_rematch)}
+              onClick={() => void handleRematch()}
+              className="btn-primary px-8 py-3 disabled:opacity-50"
+            >
+              {room.you_ready_for_rematch
+                ? 'Waiting for others...'
+                : busy
+                  ? 'Readying...'
+                  : 'Rematch'}
+            </button>
             <button type="button" onClick={() => void handleLeave()} className="btn-ghost px-8 py-3">
-              Back to menu
+              Leave lobby
             </button>
           </div>
         </div>

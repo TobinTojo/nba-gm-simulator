@@ -110,6 +110,7 @@ export interface MultiplayerPlayerState {
   is_host: boolean;
   is_you: boolean;
   has_passed: boolean;
+  ready_for_rematch?: boolean;
   avatar_url?: string | null;
 }
 
@@ -138,6 +139,8 @@ export interface MultiplayerRoomResponse {
   you_are_host: boolean;
   in_room: boolean;
   can_start: boolean;
+  rematch_ready_count?: number;
+  you_ready_for_rematch?: boolean;
   accepted?: boolean | null;
   your_feedback?: string | null;
 }

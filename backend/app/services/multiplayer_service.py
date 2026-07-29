@@ -44,10 +44,11 @@ class MultiplayerRoom:
     total_rounds: int
     era: str
     sequence: list[str]
-    status: str = "waiting"  # waiting | playing | finished
+    status: str = "waiting"  # waiting | countdown | playing | finished
     round_index: int = 0
     used_player_ids: list[int] = field(default_factory=list)
     round_passes: set[str] = field(default_factory=set)
+    rematch_ready: set[str] = field(default_factory=set)
     last_message: str = "Waiting for players..."
     last_winner_id: str | None = None
     last_matched_name: str = ""
@@ -139,6 +140,37 @@ def _record_friendly_1v1_win(room: MultiplayerRoom, winners: list[RoomPlayer]) -
         pass
 
 
+def _closed_room_payload(room: MultiplayerRoom, message: str) -> dict[str, Any]:
+    return {
+        "code": room.code,
+        "status": "closed",
+        "max_players": MAX_PLAYERS,
+        "total_rounds": room.total_rounds,
+        "era": room.era,
+        "era_label": era_label(room.era),
+        "round_seconds": ROUND_SECONDS,
+        "countdown_seconds": COUNTDOWN_SECONDS,
+        "round_index": room.round_index,
+        "round_number": min(room.round_index + 1, room.total_rounds),
+        "time_left": None,
+        "countdown_left": None,
+        "current_initials": "",
+        "initials_player_count": 0,
+        "players": [],
+        "pass_count": 0,
+        "you_passed": False,
+        "last_message": message,
+        "last_winner_id": None,
+        "last_matched_name": "",
+        "winner_ids": [],
+        "you_are_host": False,
+        "in_room": False,
+        "can_start": False,
+        "rematch_ready_count": 0,
+        "you_ready_for_rematch": False,
+    }
+
+
 def leave_room(code: str, player_id: str) -> dict[str, Any]:
     """Remove a player from the lobby/match and sync for everyone else."""
     room_code = code.strip().upper()
@@ -158,38 +190,20 @@ def leave_room(code: str, player_id: str) -> dict[str, Any]:
             return serialize_room(room, player_id)
 
         name = player.display_name
+
+        # Leaving after the match ends closes the lobby for everyone.
+        if room.status == "finished":
+            del _rooms[room_code]
+            return _closed_room_payload(room, f"{name} left. Room closed.")
+
         room.players = [entry for entry in room.players if entry.player_id != player_id]
         room.round_passes.discard(player_id)
+        room.rematch_ready.discard(player_id)
         room.updated_at = time.time()
 
         if not room.players:
             del _rooms[room_code]
-            return {
-                "code": room_code,
-                "status": "closed",
-                "max_players": MAX_PLAYERS,
-                "total_rounds": room.total_rounds,
-                "era": room.era,
-                "era_label": era_label(room.era),
-                "round_seconds": ROUND_SECONDS,
-                "countdown_seconds": COUNTDOWN_SECONDS,
-                "round_index": room.round_index,
-                "round_number": min(room.round_index + 1, room.total_rounds),
-                "time_left": None,
-                "countdown_left": None,
-                "current_initials": "",
-                "initials_player_count": 0,
-                "players": [],
-                "pass_count": 0,
-                "you_passed": False,
-                "last_message": f"{name} left. Room closed.",
-                "last_winner_id": None,
-                "last_matched_name": "",
-                "winner_ids": [],
-                "you_are_host": False,
-                "in_room": False,
-                "can_start": False,
-            }
+            return _closed_room_payload(room, f"{name} left. Room closed.")
 
         if room.host_id == player_id:
             room.host_id = room.players[0].player_id
@@ -210,6 +224,7 @@ def _finish_match(room: MultiplayerRoom) -> None:
     room.status = "finished"
     room.round_started_at = None
     room.round_passes.clear()
+    room.rematch_ready.clear()
     if not room.players:
         room.last_message = "Match over."
         return
@@ -336,6 +351,7 @@ def serialize_room(room: MultiplayerRoom, viewer_id: str | None = None) -> dict[
                 "is_host": player.player_id == room.host_id,
                 "is_you": viewer_id == player.player_id,
                 "has_passed": player.player_id in room.round_passes,
+                "ready_for_rematch": player.player_id in room.rematch_ready,
                 "avatar_url": player.avatar_url,
             }
             for player in room.players
@@ -349,6 +365,8 @@ def serialize_room(room: MultiplayerRoom, viewer_id: str | None = None) -> dict[
         "you_are_host": you_are_host,
         "in_room": in_room,
         "can_start": you_are_host and room.status == "waiting" and len(room.players) >= 2,
+        "rematch_ready_count": len(room.rematch_ready),
+        "you_ready_for_rematch": bool(viewer_id and viewer_id in room.rematch_ready),
     }
 
 
@@ -496,13 +514,14 @@ def start_match(code: str, player_id: str) -> dict[str, Any]:
         room.round_started_at = None
         room.countdown_started_at = time.time()
         room.friendly_win_recorded = False
+        room.rematch_ready.clear()
         room.last_message = "Get ready..."
         room.updated_at = time.time()
         return serialize_room(room, player_id)
 
 
 def rematch(code: str, player_id: str) -> dict[str, Any]:
-    """Host restarts the same lobby after a finished match."""
+    """Any player can ready up; rematch starts only when everyone remaining opts in."""
     room_code = code.strip().upper()
     player_id = player_id.strip()
 
@@ -510,27 +529,38 @@ def rematch(code: str, player_id: str) -> dict[str, Any]:
         room = _rooms.get(room_code)
         if room is None:
             raise MultiplayerError("Room not found.", 404)
-        if player_id != room.host_id:
-            raise MultiplayerError("Only the host can start a rematch.", 403)
         if room.status != "finished":
             raise MultiplayerError("Rematch is only available after the match ends.")
         if len(room.players) < 2:
             raise MultiplayerError("Need at least 2 players to rematch.")
 
+        player = _find_player(room, player_id)
+        if player is None:
+            raise MultiplayerError("You are not in this room.", 403)
+
+        room.rematch_ready.add(player_id)
+        ready = len(room.rematch_ready)
+        needed = len(room.players)
+        room.updated_at = time.time()
+
+        if ready < needed:
+            room.last_message = f"{player.display_name} wants a rematch ({ready}/{needed})."
+            return serialize_room(room, player_id)
+
         room.sequence = _build_sequence(room.total_rounds, room.era)
-        for player in room.players:
-            player.score = 0
+        for entry in room.players:
+            entry.score = 0
         room.status = "countdown"
         room.round_index = 0
         room.used_player_ids = []
         room.round_passes.clear()
+        room.rematch_ready.clear()
         room.last_winner_id = None
         room.last_matched_name = ""
         room.round_started_at = None
         room.countdown_started_at = time.time()
         room.friendly_win_recorded = False
         room.last_message = "Rematch! Get ready..."
-        room.updated_at = time.time()
         return serialize_room(room, player_id)
 
 
@@ -622,11 +652,11 @@ def submit_guess(code: str, player_id: str, guess: str) -> dict[str, Any]:
         )
 
         if not result.correct:
-            room.last_message = result.reason or "Incorrect — keep trying!"
+            # Keep incorrect feedback private to the guesser (do not broadcast via last_message).
             room.updated_at = time.time()
             payload = serialize_room(room, player_id)
             payload["accepted"] = False
-            payload["your_feedback"] = result.reason
+            payload["your_feedback"] = result.reason or "Incorrect. Keep trying!"
             return payload
 
         player.score += 1
